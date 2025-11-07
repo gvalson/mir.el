@@ -119,7 +119,7 @@ topic.")
       ;; if we're somehow in an existing mir topic, do an extract.
       (if (string= default-directory mir-archive-directory)
           (mir-extract text)
-        (mir-import text (completing-read "Priority: " nil)))
+        (mir-import text (string-to-number (completing-read "Priority: " nil))))
     (user-error "%s" "Region not active, skipping")))
 
 ;; Problem: importing from epubs and naming the file epub works with
@@ -206,7 +206,7 @@ topic.")
          (new-af (if mir-scale-a-factor-by-priority
                      (+ 1.2 (/ priority 17.543859))
                    old-af))
-         (new-interval (* old-interval new-af)))
+         (new-interval (* old-interval old-af)))
     (sqlite-execute (mir--get-db)
                     "UPDATE topics SET last_review = date('now', 'localtime'), a_factor=?, interval= ? WHERE id = ?;" `(,new-af ,new-interval ,id))))
 
