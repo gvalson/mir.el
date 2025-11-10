@@ -267,7 +267,7 @@ the file is not found."
                     `(,new-af ,new-interval ,new-rt ,id))
     (sqlite-execute (mir--get-db)
                     "INSERT INTO topic_reviews (topic_id, review_datetime, priority, a_factor) VALUES (?, datetime('now', 'localtime'), ?, ?)"
-                    `(,id ,priority ,new-af))))
+                    `(,id ,priority ,old-af))))
 
 (defun mir-queue-next ()
   (setq mir-queue (funcall mir-query-function))
