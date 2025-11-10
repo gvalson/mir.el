@@ -2,24 +2,57 @@
 
 # [[https://melpa.org/#/package-name][file:https://melpa.org/packages/package-name-badge.svg]] [[https://stable.melpa.org/#/package-name][file:https://stable.melpa.org/packages/package-name-badge.svg]]
 
-Mir is a package that helps to create an incremental reading workflow
-in Emacs.
+Mir is a package for incremental reading inside Emacs.
+
+* What is Incremental Reading?
+
+Incremental Reading is a continuous process of importing, refining,
+memorizing and dismissing articles, which are further referred to as
+"topics". A "topic" is any piece of text that you want to process.
+Processing in this case means:
+
+1. Importing it into the system, letting the system schedule when the
+   topic will be shown to you.
+2. On the scheduled day, reading the item.
+3. Making extracts and/or turning some of the text into permanent
+   notes, flashcards, etc.
+4. Repeating until you feel that the potential of the topic is
+   exhausted, at which point you dismiss it.
+
+Incremental reading automatically schedules when you're going to
+review what you've read, thereby increasing your familiarity with the
+text and strengthening the memory of the concepts within. However,
+mir's scope does not extend into asking you questions about the
+material. For that, I recommend pairing mir with a package like
+[[https://github.com/bohonghuang/org-srs][org-srs]] or a standalone spaced repetition program like [[https://apps.ankiweb.net/][Anki]],
+[[https://mnemosyne-proj.org/][Mnemosyne]], and others.
 
 * Installation
 
-** MELPA
+** COMMENT MELPA
 
 If you installed from MELPA, you're done. Just run one of the commands
 below.
 
+** use-package
+
+#+begin_src elisp
+  (use-package mir
+    :vc "https://github.com/gvalson/mir"
+    :commands (mir-import-buffer mir-extract-or-import-from-region)
+    :config
+    (setq "mir-archive-directory" (expand-file-name "~/Documents/mir")))
+#+end_src
+
 ** Manual
 
-Install these required packages:
+Ensure that emacs is compiled with SQLite support and that the
+following packages are installed:
 
-- =foo=
-- =bar=
+- =denote=
+- =denote-sequence=
 
-Then put this file in your load-path, and put this in your init
+Then ensure that mir in your load-path, and put this in your init
 file:
 
 #+BEGIN_SRC elisp
@@ -28,9 +61,54 @@ file:
 
 * Usage
 
-Run one of these commands:
+** Set =mir-archive-directory=
 
-- =package-name-command=: Frobnicate the flange.
+First of all, choose a folder where you'll keep all your topics.
+Everything that you import is saved in this directory, so make sure
+that you can access it comfortably in case you want to make any manual
+adjustments. This variable defaults to =~/Documents/mir=.
+
+** Import your material
+
+Now comes the time to import. You can use the following functions for
+this:
+
+- =mir-import-buffer=: Imports the currently opened buffer.
+- =mir-extract-or-import-from-region=: Imports the selected part from
+  the current buffer.
+- =mir-import-from-minibuffer=: Enter your text via the minibuffer and
+  import it.
+
+Each of these commands will ask you to type in a priority. Much like
+in [[https://help.supermemo.org/wiki/Glossary:Priority][SuperMemo]], the topic's priority represents its relative importance
+and ranges from 0 to 100 (not including 0 and 100). More important
+items have a lower priority value.
+
+** Start reading
+
+Next, run =mir-read= to start reading. You should see a new buffer
+show up with one of your imported topics. Feel free to use
+=mir-extract-or-import-from-region= to extract important bits out or
+use any other command, as the buffer is just like any other emacs
+buffer. When you're done reading or simply want to move on, invoke
+=mir-read-next=. You can continue until the queue runs out, after
+which you can either import more items or do something else.
+
+* Advanced Usage
+
+** Dismissing Topics
+
+** Scheduling Topics and the A-factor
+
+** Keeping Track of Extracts with denote-sequence.
+
+** Inspecting the Database
+
+Mir uses SQLite to store scheduling information and review history. By
+default, the database file is located in =mir-archive-directory= and
+named =mir.db=. The name and location is configurable via
+=mir-db-location=. You can use the built-in =sqlite-mode-open-file=
+command to inspect the database.
 
 * Changelog
 
