@@ -2,7 +2,7 @@
 
 ;; Author: Giorgi Gvalia <gvalia@pm.me>
 ;; Version: 0.1-pre
-;; Package-Requires: ((emacs "25.2"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: incremental-reading srs anki supermemo
 
 ;; This file is not part of GNU Emacs.
@@ -80,13 +80,16 @@
 ;; If this directory doesn't exist, file write commands error out.
 (defcustom mir-archive-directory (expand-file-name "~/Documents/mir/")
   "The directory where all the imported material will be stored.")
+
 (defcustom mir-db-location (concat mir-archive-directory "mir.db")
   "The location for mir's database")
 
 (defcustom mir-default-a-factor 2
   "The default A-factor for new cards.")
+
 (defcustom mir-default-interval 1
   "How soon the newly added cards will be shown in days.")
+
 (defcustom mir-scale-a-factor-by-priority t
   "Whether the A-factor will be scaled based on the topic's priority. The
 formula for calculating the new factor is priority/17.543859 + 1.2. This
@@ -96,6 +99,7 @@ from 0 to 100 (lower meaning more important topics).")
 (defcustom mir-query-function #'mir-get-topics-for-today-by-priority
   "The function that is used to fetch topics for populating `mir-queue'. The default option
 is to fetch all the topics that are due today sorted by priority.")
+
 (defcustom mir-bury-buffer-after-finishing t
   "Whether to bury the current buffer when calling `mir-read-next'. When set to a non-nil value, the user will see the currently open buffer be dismissed at the end of a reading session (when there's no more topics in the queue).")
 
@@ -105,39 +109,47 @@ is to fetch all the topics that are due today sorted by priority.")
   "The queue for topics to be read.")
 
 (defvar mir--current-topic '()
-  "The topic that's under review as of right now. This is NOT the next
-topic.")
+  "The topic that's under review as of right now. mir uses this variable to
+keep track of which topic should be affected by operations")
 
 ;;;; Commands
 
 ;;;###autoload
 (defun mir-extract-or-import-from-region ()
-  "Make a new topic note from the selected region"
+  "Import the selected region as a new topic. If the region is in an
+existing topic, the text is extracted as a new descendant."
   (interactive)
   (if-let* (((region-active-p))
             (text (buffer-substring-no-properties (region-beginning) (region-end))))
       ;; if we're somehow in an existing mir topic, do an extract.
+      ;; TODO: replace this with a better check.
       (if (string= default-directory mir-archive-directory)
           (mir-extract text)
-        (mir-import text (string-to-number (completing-read "Priority: " nil))))
+        (mir-import text (mir-ask-for-priority) (mir-ask-for-name)))
     (user-error "%s" "Region not active, skipping")))
 
-;; Problem: importing from epubs and naming the file epub works with
-;; emacs but it's not a TRUE epub.
-
 ;;;###autoload
-(defun mir-import-buffer (priority)
-  ""
-  (interactive "nPriority: ")
-  (mir-import (buffer-substring (point-min) (point-max)) priority))
+(defun mir-import-buffer (name priority)
+  "Import the current buffer as a new topic."
+  (interactive
+   (list (mir-ask-for-name)
+         (mir-ask-for-priority)))
+  ;; TODO: find a way to preserve images and formatting.
+  (mir-import (buffer-substring (point-min) (point-max)) priority name))
 
 ;;;###autoload
 (defun mir-import-from-minibuffer (text name priority)
-  (interactive "MInscribe your material: \nMName: \nnPriority: ")
+  "Import TEXT from the minibuffer as a new topic."
+  ;; (interactive "MInscribe your material: \nMName: ")
+  (interactive
+   (list (read-string "Inscribe your material: " nil nil nil t)
+         (mir-ask-for-name)
+         (mir-ask-for-priority)))
   (mir-import text priority name))
 
 ;;;###autoload
 (defun mir-read ()
+  "Start a reading session. Use `mir-read-next' to advance to a new topic."
   (interactive)
   (if-let* ((next-topic (mir-queue-next)))
       (mir-show-topic next-topic)
@@ -145,29 +157,16 @@ topic.")
 
 ;;;###autoload
 (defun mir-read-next ()
+  "Advance to the next topic when reading. Use `mir-read' to start reading.
+If no new topic is available, a user error is thrown indicating so."
   (interactive)
   ;; update the db
-  (when mir--current-topic
-    (mir-update-topic mir--current-topic))
-  ;; set it to nil to prevent repeated invocations of the command from
-  ;; updating the topic many many times
-  (setq mir--current-topic nil)
-  ;; get the next item in the queue
-  (if-let* ((next-topic (mir-queue-next)))
-      (mir-show-topic next-topic)
-    (progn
-      (when mir-bury-buffer-after-finishing
-        (bury-buffer))
-      (user-error "%s" "Queue is now empty: nothing to read"))))
-
-;;;###autoload
-(defun mir-dismiss-current-topic ()
-  "Dismiss the current topic, close to DONE in SM."
-  (interactive)
   ;; this can only be done in a mir topic.
-  (if (string= default-directory mir-archive-directory)
-      (mir--archive-topic mir--current-topic)
-    (kill-buffer)
+  (when (string= default-directory mir-archive-directory)
+    (when mir--current-topic
+      (mir-update-topic mir--current-topic))
+    ;; set it to nil to prevent repeated invocations of the command from
+    ;; updating the topic many many times
     (setq mir--current-topic nil)
     ;; get the next item in the queue
     (if-let* ((next-topic (mir-queue-next)))
@@ -176,6 +175,27 @@ topic.")
         (when mir-bury-buffer-after-finishing
           (bury-buffer))
         (user-error "%s" "Queue is now empty: nothing to read")))))
+
+;;;###autoload
+(defun mir-dismiss-current-topic ()
+  "Dismiss the current topic. The dismissed topic will no longer be
+featured in reviews anymore and its corresponding file will have
+the 'archive' tag applied to it. Does nothing if invoked outside of
+`mir-archive-directory'."
+  (interactive)
+  ;; this can only be done in a mir topic.
+  (when (and (string= default-directory mir-archive-directory)
+             (yes-or-no-p "Dismiss the current topic? "))
+    (progn (mir--archive-topic mir--current-topic)
+           (kill-buffer)
+           (setq mir--current-topic nil)
+           ;; get the next item in the queue
+           (if-let* ((next-topic (mir-queue-next)))
+               (mir-show-topic next-topic)
+             (progn
+               (when mir-bury-buffer-after-finishing
+                 (bury-buffer))
+               (user-error "%s" "Queue is now empty: nothing to read"))))))
 
 ;;;; Functions
 
@@ -186,9 +206,22 @@ topic.")
 ;;
 ;; Name: ask the user, prefill the name of the buffer
 
-(defun mir-import (text priority &optional name)
+(defun mir-ask-for-name ()
+  "Asks the user for the topic's name."
+  ;; Inherits the current input method
+  (read-string "Name for topic: " nil nil nil t))
+
+(defun mir-ask-for-priority ()
+  "Asks the user for a priority value. Returns a floating point value
+between 0 and 100 or an user error otherwise."
+  (if-let* ((p (string-to-number (completing-read "Priority (0-100): " nil)))
+            (is-within-bounds (and (< p 100)
+                                   (> p 0))))
+      p
+    (user-error "%s" "Priority must be a number between 0 and 100.")))
+
+(defun mir-import (text priority name)
   (let* ((extension (mir--get-extension-to-current-buffer))
-         (name (or name (mir--make-file-name)))
          (file-name (mir--format-file-name name nil extension))
          (file-id (denote-extract-id-from-string file-name)))
     (mir--add-topic-to-db file-id priority)
@@ -207,13 +240,17 @@ topic.")
 (defun mir-get-topics-for-today-by-priority ()
   "Returns a list of topics due to review today, sorted by priority."
   (sqlite-select (mir--get-db)
-                 "SELECT * FROM topics WHERE last_review IS NULL OR julianday('now', 'localtime') - julianday(last_review) >= interval ORDER BY priority DESC;"))
+                 "SELECT * FROM topics WHERE archived = 0 AND last_review IS NULL OR julianday('now', 'localtime') - julianday(last_review) >= interval ORDER BY priority DESC;"))
 
 (defun mir-show-topic (topic)
+  "Navigates to the file corresponding to TOPIC. Raises an user-error if
+the file is not found."
   (setq mir--current-topic topic)
-  (let ((denote-directory mir-archive-directory)
-        (id (car topic)))
-    (find-file (denote-get-path-by-id id))))
+  (if-let* ((denote-directory mir-archive-directory)
+         (id (car topic))
+         (file-path (denote-get-path-by-id id)))
+      (find-file file-path)
+    (user-error "%s%s%s" "Error: File with ID " id " not found!")))
 
 (defun mir-update-topic (topic)
   (let* ((id (car topic))
@@ -223,9 +260,14 @@ topic.")
          (new-af (if mir-scale-a-factor-by-priority
                      (+ 1.2 (/ priority 17.543859))
                    old-af))
-         (new-interval (* old-interval old-af)))
+         (new-interval (* old-interval old-af))
+         (new-rt (1+ (nth 6 topic))))
     (sqlite-execute (mir--get-db)
-                    "UPDATE topics SET last_review = date('now', 'localtime'), a_factor=?, interval= ? WHERE id = ?;" `(,new-af ,new-interval ,id))))
+                    "UPDATE topics SET last_review = date('now', 'localtime'), a_factor=?, interval=?, times_read=? WHERE id=?;"
+                    `(,new-af ,new-interval ,new-rt ,id))
+    (sqlite-execute (mir--get-db)
+                    "INSERT INTO topic_reviews (topic_id, review_datetime, priority, a_factor) VALUES (?, datetime('now', 'localtime'), ?, ?)"
+                    `(,id ,priority ,new-af))))
 
 (defun mir-queue-next ()
   (setq mir-queue (funcall mir-query-function))
@@ -243,12 +285,6 @@ topic.")
 
 ;; TODO: extract clozes to anki
 ;; TODO: use autogenerated folgezettel to denote trees
-;; TODO: Dismiss.
-;; After we're done with a piece, we can:
-;; - use a reserved "archive" keyword
-;; - use an "archive" extension
-;; - or prepend the original extension with like ".archive.html"
-;; TODO: Review history, add a different table?
 
 ;;;;; Private
 
@@ -256,13 +292,27 @@ topic.")
   (sqlite-open mir-db-location))
 
 (defun mir--init-db ()
+ (sqlite-pragma (mir--get-db)
+                   "foreign_keys = ON;")
+ (sqlite-execute (mir--get-db)
+                  (concat "CREATE TABLE IF NOT EXISTS topics ("
+                          "id TEXT PRIMARY KEY, priority REAL NOT NULL, "
+                          "a_factor REAL NOT NULL, interval REAL NOT NULL, "
+                          "added TEXT NOT NULL, last_review TEXT, "
+                          "times_read INTEGER NOT NULL, "
+                          "archived INT NOT NULL, archived_date TEXT) STRICT; "))
   (sqlite-execute (mir--get-db)
-                  "CREATE TABLE IF NOT EXISTS topics (id TEXT PRIMARY KEY, priority NOT NULL, a_factor NOT NULL, interval NOT NULL, added NOT NULL, last_review)"))
+                  (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
+                          "topic_id TEXT NOT NULL, "
+                          "review_datetime TEXT NOT NULL, "
+                          "priority REAL NOT NULL, a_factor REAL NOT NULL, "
+                          "FOREIGN KEY (topic_id) REFERENCES topics(id)"
+                          ") STRICT;")))
 
 (defun mir--add-topic-to-db (id priority)
   (mir--init-db)
   (sqlite-execute (mir--get-db)
-                  "INSERT INTO topics (id, priority, a_factor, interval, added) VALUES(?, ?, ?, ?, ?)"
+                  "INSERT INTO topics (id, priority, a_factor, interval, added, times_read, archived) VALUES(?, ?, ?, ?, ?, 0, 0)"
                   `(,id ,priority ,mir-default-a-factor ,mir-default-interval ,(format-time-string "%Y-%m-%d"))))
 
 (defun mir--format-file-name (name tags extension)
@@ -272,26 +322,22 @@ topic.")
    (denote-get-identifier (current-time))
    tags name extension nil))
 
+;; Problem: importing from epubs and naming the file epub works with
+;; emacs but it's not a TRUE epub.
 (defun mir--get-extension-to-current-buffer ()
   "We assume that everything is .txt for now"
   ".txt")
 
-;; It'd be cool to have a list of functions that process the buffer
-;; name, this should probably be customizable.
-(defun mir--make-file-name ()
-  (completing-read "Topic title: " nil nil nil (buffer-name)))
-
-(defun mir--zero-out-topic-db (id)
+(defun mir--archive-topic-db (id)
   ;; this does not work. I should create an archived column.
   (sqlite-execute (mir--get-db)
-                  "UPDATE topics SET last_review = date('now', 'localtime'), a_factor=0, interval=0 WHERE id = ?;" `(,id)))
+                  "UPDATE topics SET last_review = date('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id)))
 
-;; should we have an "archived" column in the db?
-;; or we can just set the interval and a-factor to 0.
 (defun mir--archive-topic (topic)
   (let* ((id (car topic))
          (denote-directory mir-archive-directory)
          (denote-save-buffers t)
+         (denote-kill-buffers t)
          (topic-file-path (denote-get-path-by-id id))
          (old-keywords (denote-extract-keywords-from-path topic-file-path))
          (new-keywords (add-to-list 'old-keywords "archive")))
@@ -300,7 +346,7 @@ topic.")
                         new-keywords
                         'keep-current
                         'keep-current)
-    (mir--zero-out-topic-db id)))
+    (mir--archive-topic-db id)))
 
 ;;;; Footer
 
