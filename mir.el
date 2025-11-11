@@ -119,6 +119,9 @@ by priority.")
   "The topic that's under review as of right now. mir uses this variable to
 keep track of which topic should be affected by operations")
 
+(defvar mir-show-topic-hook '()
+  "Hooks for `mir-show-topic'; runs after a topic is displayed.")
+
 ;;;; Commands
 
 ;;;###autoload
@@ -174,7 +177,7 @@ If no new topic is available, a user error is thrown indicating so."
   ;; this can only be done in a mir topic.
   (when (string= default-directory mir-archive-directory)
     (when mir--current-topic
-      (mir-update-topic mir--current-topic))
+      (mir--do-topic-review-db mir--current-topic))
     ;; set it to nil to prevent repeated invocations of the command from
     ;; updating the topic many many times
     (setq mir--current-topic nil)
@@ -208,10 +211,47 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
                (user-error "%s" "Queue is now empty: nothing to read"))))))
 
 (defun mir-show-topic-metadata ()
+  "Print out the current topic's ID, priority, A-factor and interval."
   (interactive)
+  (setq mir--current-topic (mir-queue-next))
   (if mir--current-topic
-      (pp mir--current-topic)
+      (message (format
+                "Topic ID: %s; Priority: %.3f; A-Factor: %.3f; Interval: %d;"
+                (car mir--current-topic)
+                (nth 1 mir--current-topic)
+                (nth 2 mir--current-topic)
+                (nth 3 mir--current-topic)))
     (message "No topic is currently active.")))
+
+(defun mir-set-a-factor ()
+  "Set a new A-factor for the current topic."
+  (interactive)
+  (setq mir--current-topic (mir-queue-next))
+  (if mir--current-topic
+      (let ((new-af (read-number "New A-Factor: "
+                                 (nth 2 mir--current-topic)))
+            (id (car mir--current-topic)))
+        (mir--update-af-db id new-af)
+        (message "Set new A-factor to %f" new-af))
+    (user-error "%s" "No active topic.")))
+
+(defun mir-set-priority ()
+  "Set a new priority for the current topic."
+  (interactive)
+  (setq mir--current-topic (mir-queue-next))
+  (if mir--current-topic
+      (let* ((old-priority (nth 1 mir--current-topic))
+             (new-priority (mir-ask-for-priority))
+             (id (car mir--current-topic)))
+        (mir--update-priority-db id new-priority))
+        (message "Set new priority to %f" new-priority)
+    (user-error "%s" "No active topic.")))
+
+(defun mir-reschedule ()
+  ;; how would this work? I think we might need to add a "scheduled"
+  ;; column for this...
+  ;; already have `mir--update-interval-db'.
+    (interactive))
 
 ;;;; Functions
 
@@ -222,10 +262,12 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   ;; Inherits the current input method
   (read-string "Name for topic: " nil nil nil t))
 
-(defun mir-ask-for-priority ()
+(defun mir-ask-for-priority (&optional old-priority)
   "Asks the user for a priority value. Returns a floating point value
-between 0 and 100 or an user error otherwise."
-  (if-let* ((p (string-to-number (completing-read "Priority (0-100): " nil)))
+between 0 and 100 or an user error otherwise. Optionally use
+OLD-PRIORITY as the default value."
+  (if-let* ((p (string-to-number
+                (completing-read "Priority (0-100): " nil nil nil old-priority)))
             (is-within-bounds (and (< p 100)
                                    (> p 0))))
       p
@@ -256,53 +298,24 @@ between 0 and 100 or an user error otherwise."
                  "SELECT * FROM topics WHERE archived = 0 AND last_review IS NULL OR julianday('now', 'localtime') - julianday(last_review) >= interval ORDER BY priority ASC;"))
 
 (defun mir-show-topic (topic)
-  "Navigates to the file corresponding to TOPIC. Raises an user-error if
+  "Navigates to the file corresponding to TOPIC. Runs
+`mir-show-topic-hook' after opening the buffer. Raises an user-error if
 the file is not found."
   (setq mir--current-topic topic)
   (if-let* ((denote-directory mir-archive-directory)
-         (id (car topic))
-         (file-path (denote-get-path-by-id id)))
-      (find-file file-path)
+            (id (car topic))
+            (file-path (denote-get-path-by-id id)))
+      (progn (find-file file-path)
+             (run-hooks 'mir-show-topic-hook))
     ;; Optional: ask the user to delete the entry in db
     (user-error "%s%s%s" "Error: File with ID " id " not found!")))
-
-(defun mir-update-topic (topic)
-  (let* ((id (car topic))
-         (priority (nth 1 topic))
-         (old-af (nth 2 topic))
-         (old-interval (nth 3 topic))
-         (new-af (if mir-scale-a-factor-by-priority
-                     (+ 1.2 (/ priority 17.543859))
-                   old-af))
-         (new-interval (* old-interval old-af))
-         (new-rt (1+ (nth 6 topic))))
-    (sqlite-execute (mir--get-db)
-                    "UPDATE topics SET last_review = date('now', 'localtime'), a_factor=?, interval=?, times_read=? WHERE id=?;"
-                    `(,new-af ,new-interval ,new-rt ,id))
-    (sqlite-execute (mir--get-db)
-                    "INSERT INTO topic_reviews (topic_id, review_datetime, priority, a_factor) VALUES (?, datetime('now', 'localtime'), ?, ?)"
-                    `(,id ,priority ,old-af))))
 
 (defun mir-queue-next ()
   (setq mir-queue (funcall mir-query-function))
   (when mir-queue
       (pop mir-queue)))
 
-(defun mir-set-a-factor ()
-    (interactive))
-
-(defun mir-reschedule ()
-  ;; how would this work? I think we might need to add a "scheduled"
-  ;; column for this...
-    (interactive))
-
-(defun mir-set-priority ()
-    (interactive))
-
 ;; TODO: extract clozes to anki
-
-;; FIXME: When we have both an extract and a fresh topic with the same
-;; priority, which one should be shown first?
 
 ;;;;; Private
 
@@ -345,6 +358,43 @@ the file is not found."
                     ,mir-default-a-factor
                     ,mir-default-extract-interval)))
 
+(defun mir--archive-topic-db (id)
+  ;; this does not work. I should create an archived column.
+  (sqlite-execute (mir--get-db)
+                  "UPDATE topics SET last_review = date('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id)))
+
+(defun mir--do-topic-review-db (topic)
+  (let* ((id (car topic))
+         (priority (nth 1 topic))
+         (old-af (nth 2 topic))
+         (old-interval (nth 3 topic))
+         (new-af (if mir-scale-a-factor-by-priority
+                     (+ 1.2 (/ priority 17.543859))
+                   old-af))
+         (new-interval (* old-interval old-af))
+         (new-rt (1+ (nth 6 topic))))
+    (sqlite-execute (mir--get-db)
+                    "UPDATE topics SET last_review = date('now', 'localtime'), a_factor=?, interval=?, times_read=? WHERE id=?;"
+                    `(,new-af ,new-interval ,new-rt ,id))
+    (sqlite-execute (mir--get-db)
+                    "INSERT INTO topic_reviews (topic_id, review_datetime, priority, a_factor) VALUES (?, datetime('now', 'localtime'), ?, ?)"
+                    `(,id ,priority ,old-af))))
+
+(defun mir--update-af-db (id a-factor)
+  (sqlite-execute (mir--get-db)
+                  "UPDATE topics SET a_factor=? WHERE id=?"
+                  `(,a-factor ,id)))
+
+(defun mir--update-priority-db (id priority)
+  (sqlite-execute (mir--get-db)
+                  "UPDATE topics SET priority=? WHERE id=?"
+                  `(,priority ,id)))
+
+(defun mir--update-interval-db (id interval)
+  (sqlite-execute (mir--get-db)
+                  "UPDATE topics SET interval=? WHERE id=?"
+                  `(,interval ,id)))
+
 (defun mir--format-file-name (name tags extension seq-type &optional parent-sequence)
   "Wrapper around `denote-format-file-name' for now."
   (let* ((denote-directory mir-archive-directory)
@@ -360,11 +410,6 @@ the file is not found."
 (defun mir--get-extension-to-current-buffer ()
   "We assume that everything is .txt for now"
   ".txt")
-
-(defun mir--archive-topic-db (id)
-  ;; this does not work. I should create an archived column.
-  (sqlite-execute (mir--get-db)
-                  "UPDATE topics SET last_review = date('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id)))
 
 (defun mir--archive-topic (topic)
   (let* ((id (car topic))
