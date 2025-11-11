@@ -207,6 +207,12 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
                  (bury-buffer))
                (user-error "%s" "Queue is now empty: nothing to read"))))))
 
+(defun mir-show-topic-metadata ()
+  (interactive)
+  (if mir--current-topic
+      (pp mir--current-topic)
+    (message "No topic is currently active.")))
+
 ;;;; Functions
 
 ;;;;; Public
@@ -294,7 +300,6 @@ the file is not found."
     (interactive))
 
 ;; TODO: extract clozes to anki
-;; TODO: functions to show stats of the current topic
 
 ;; FIXME: When we have both an extract and a fresh topic with the same
 ;; priority, which one should be shown first?
