@@ -293,6 +293,8 @@ the file is not found."
   (setq mir--current-topic topic)
   (if-let* ((denote-directory mir-archive-directory)
             (id (car topic))
+            ;; FIXME: hacky, this should not be defined here.
+            (denote-id-regexp "\\([0-9]\\{8\\}\\)\\(T[0-9]\\{6\\}[0-9]*\\)")
             (file-path (denote-get-path-by-id id)))
       (progn (find-file file-path)
              (run-hooks 'mir-show-topic-hook))
@@ -416,6 +418,7 @@ the file is not found."
          (denote-directory mir-archive-directory)
          (denote-save-buffers t)
          (denote-kill-buffers t)
+         (denote-id-regexp "\\([0-9]\\{8\\}\\)\\(T[0-9]\\{6\\}[0-9]*\\)")
          (topic-file-path (denote-get-path-by-id id))
          (old-keywords (denote-extract-keywords-from-path topic-file-path))
          (new-keywords (add-to-list 'old-keywords "archive")))
