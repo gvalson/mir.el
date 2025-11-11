@@ -134,7 +134,7 @@ existing topic, the text is extracted as a new descendant."
       ;; if we're somehow in an existing mir topic, do an extract.
       ;; TODO: replace this with a better check.
       (if (string= default-directory mir-archive-directory)
-          (mir-extract text)
+          (mir--add-extract text)
         (mir-import text (mir-ask-for-priority) (mir-ask-for-name)))
     (user-error "%s" "Region not active, skipping")))
 
@@ -281,17 +281,6 @@ OLD-PRIORITY as the default value."
     (mir--add-topic-to-db file-id priority)
     (write-region text nil file-name)))
 
-(defun mir-extract (text)
-  (let* ((extension (mir--get-extension-to-current-buffer))
-         (name (mir-ask-for-name))
-         (parent-sequence (denote-retrieve-filename-signature buffer-file-name))
-         (parent-keywords (denote-extract-keywords-from-path buffer-file-name))
-         (file-name (mir--format-file-name name parent-keywords extension 'child parent-sequence))
-         (file-id (denote-extract-id-from-string file-name)))
-    ;; maybe randomly subtract priority vals?
-    (mir--add-extract-to-db file-id (nth 1 mir--current-topic))
-    (write-region text nil file-name)))
-
 (defun mir-get-topics-for-today-by-priority ()
   "Returns a list of topics due to review today, sorted by priority."
   (sqlite-select (mir--get-db)
@@ -410,6 +399,17 @@ the file is not found."
 (defun mir--get-extension-to-current-buffer ()
   "We assume that everything is .txt for now"
   ".txt")
+
+(defun mir--add-extract (text)
+  (let* ((extension (mir--get-extension-to-current-buffer))
+         (name (mir-ask-for-name))
+         (parent-sequence (denote-retrieve-filename-signature buffer-file-name))
+         (parent-keywords (denote-extract-keywords-from-path buffer-file-name))
+         (file-name (mir--format-file-name name parent-keywords extension 'child parent-sequence))
+         (file-id (denote-extract-id-from-string file-name)))
+    ;; maybe randomly subtract priority vals?
+    (mir--add-extract-to-db file-id (nth 1 mir--current-topic))
+    (write-region text nil file-name)))
 
 (defun mir--archive-topic (topic)
   (let* ((id (car topic))
