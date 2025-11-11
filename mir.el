@@ -241,7 +241,7 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   (setq mir--current-topic (mir-queue-next))
   (if mir--current-topic
       (let* ((old-priority (nth 1 mir--current-topic))
-             (new-priority (mir-ask-for-priority))
+             (new-priority (mir-ask-for-priority (format "%.3f" old-priority)))
              (id (car mir--current-topic)))
         (mir--update-priority-db id new-priority))
         (message "Set new priority to %f" new-priority)
