@@ -283,8 +283,10 @@ OLD-PRIORITY as the default value."
 
 (defun mir-get-topics-for-today-by-priority ()
   "Returns a list of topics due to review today, sorted by priority."
+  ;; Question here: should topics that have already been reviewed get
+  ;; special treatement?
   (sqlite-select (mir--get-db)
-                 "SELECT * FROM topics WHERE archived = 0 AND last_review IS NULL OR julianday('now', 'localtime') - julianday(last_review) >= interval ORDER BY priority ASC;"))
+                 "SELECT * FROM topics WHERE archived = 0 AND (last_review IS NULL OR julianday('now', 'localtime') - julianday(last_review) >= interval) ORDER BY priority ASC;"))
 
 (defun mir-show-topic (topic)
   "Navigates to the file corresponding to TOPIC. Runs
