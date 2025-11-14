@@ -150,7 +150,6 @@ existing topic, the text is extracted as a new descendant."
 ;;;###autoload
 (defun mir-import-from-minibuffer (text name priority)
   "Import TEXT from the minibuffer as a new topic."
-  ;; (interactive "MInscribe your material: \nMName: ")
   (interactive
    (list (read-string "Inscribe your material: " nil nil nil t)
          (mir-ask-for-name)
@@ -198,16 +197,7 @@ If no new topic is available, a user error is thrown indicating so."
   (when (string= default-directory mir-archive-directory)
     (when mir--current-topic
       (mir--do-topic-review-db mir--current-topic))
-    ;; set it to nil to prevent repeated invocations of the command from
-    ;; updating the topic many many times
-    (setq mir--current-topic nil)
-    ;; get the next item in the queue
-    (if-let* ((next-topic (mir-queue-next)))
-        (mir-show-topic next-topic)
-      (progn
-        (when mir-bury-buffer-after-finishing
-          (bury-buffer))
-        (user-error "%s" "Queue is now empty: nothing to read")))))
+    (mir-show-next-topic)))
 
 ;;;###autoload
 (defun mir-dismiss-current-topic ()
@@ -221,14 +211,7 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
              (yes-or-no-p "Dismiss the current topic? "))
     (progn (mir--archive-topic mir--current-topic)
            (kill-buffer)
-           (setq mir--current-topic nil)
-           ;; get the next item in the queue
-           (if-let* ((next-topic (mir-queue-next)))
-               (mir-show-topic next-topic)
-             (progn
-               (when mir-bury-buffer-after-finishing
-                 (bury-buffer))
-               (user-error "%s" "Queue is now empty: nothing to read"))))))
+           (mir-show-next-topic))))
 
 (defun mir-show-topic-metadata ()
   "Print out the current topic's ID, priority, A-factor and interval."
@@ -310,7 +293,7 @@ OLD-PRIORITY as the default value."
 
 (defun mir-show-topic (topic)
   "Navigates to the file corresponding to TOPIC. Runs
-`mir-show-topic-hook' after opening the buffer. Raises an user-error if
+`mir-show-topic-hook' after opening the buffer. Raises a user-error if
 the file is not found."
   (setq mir--current-topic topic)
   (if-let* ((denote-directory mir-archive-directory)
@@ -322,6 +305,19 @@ the file is not found."
              (run-hooks 'mir-show-topic-hook))
     ;; Optional: ask the user to delete the entry in db
     (user-error "%s%s%s" "Error: File with ID " id " not found!")))
+
+(defun mir-show-next-topic ()
+  "Load the next topic. Runs `mir-show-topic-hook' after loading. Returns a user error if there's nothing left in the queue."
+  ;; Set the current topic to nil to prevent repeated invocations of
+  ;; the command from updating the topic many many times.
+  (setq mir--current-topic nil)
+  ;; get the next item in the queue
+  (if-let* ((next-topic (mir-queue-next)))
+      (mir-show-topic next-topic)
+    (progn
+      (when mir-bury-buffer-after-finishing
+        (bury-buffer))
+      (user-error "%s" "Queue is now empty: nothing to read"))))
 
 (defun mir-queue-next ()
   (setq mir-queue (funcall mir-query-function))
