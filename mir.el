@@ -157,6 +157,26 @@ existing topic, the text is extracted as a new descendant."
          (mir-ask-for-priority)))
   (mir-import text priority name))
 
+(defun mir-import-file (file)
+  "Import FILE by copying it into `mir-archive-directory' and renaming it."
+  (interactive "fImport file: ")
+  (let* ((extension (concat "." (file-name-extension file)))
+         (new-file-name
+          (concat
+           mir-archive-directory
+           (file-name-base file)
+           extension))
+         (denote-directory mir-archive-directory)
+         (tags (denote-keywords-prompt))
+         (sequence (denote-sequence-get-new 'parent)))
+    (copy-file file new-file-name)
+    (let* ((new-new-file-name
+            (denote-rename-file new-file-name 'keep-current tags
+                                sequence (current-time)))
+           (priority (mir-ask-for-priority))
+           (id (denote-retrieve-filename-identifier new-new-file-name)))
+      (mir--add-topic-to-db id priority))))
+
 ;;;###autoload
 (defun mir-read ()
   "Start a reading session or show the current topic. Use `mir-read-next'
