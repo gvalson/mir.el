@@ -288,6 +288,11 @@ OLD-PRIORITY as the default value."
   "Returns a list of topics due to review today, sorted by priority."
   ;; Question here: should topics that have already been reviewed get
   ;; special treatement?
+  ;;
+  ;; Here, "last_review IS NULL" returns all the topics that have
+  ;; never been reviewed yet. Does SuperMemo prioritize already
+  ;; reviewed topics over these? Does it show you all the stuff you've
+  ;; already seen before beginning with the unseen stuff?
   (sqlite-select (mir--get-db)
                  "SELECT * FROM topics WHERE archived = 0 AND (last_review IS NULL OR julianday('now', 'localtime') - julianday(last_review) >= interval) ORDER BY priority ASC;"))
 
