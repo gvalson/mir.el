@@ -135,26 +135,26 @@ existing topic, the text is extracted as a new descendant."
       ;; TODO: replace this with a better check.
       (if (string= default-directory mir-archive-directory)
           (mir--add-extract text)
-        (mir-import text (mir-ask-for-priority) (mir-ask-for-name)))
+        (mir-import text (mir-ask-for-priority) (mir-ask-for-title)))
     (user-error "%s" "Region not active, skipping")))
 
 ;;;###autoload
-(defun mir-import-buffer (name priority)
+(defun mir-import-buffer (title priority)
   "Import the current buffer as a new topic."
   (interactive
-   (list (mir-ask-for-name)
+   (list (mir-ask-for-title)
          (mir-ask-for-priority)))
   ;; TODO: find a way to preserve images and formatting.
-  (mir-import (buffer-substring (point-min) (point-max)) priority name))
+  (mir-import (buffer-substring (point-min) (point-max)) priority title))
 
 ;;;###autoload
-(defun mir-import-from-minibuffer (text name priority)
-  "Import TEXT from the minibuffer as a new topic."
+(defun mir-import-from-minibuffer (text title priority)
+  "Import TEXT from the minibuffer as a new topic with TITLE."
   (interactive
    (list (read-string "Inscribe your material: " nil nil nil t)
-         (mir-ask-for-name)
+         (mir-ask-for-title)
          (mir-ask-for-priority)))
-  (mir-import text priority name))
+  (mir-import text priority title))
 
 (defun mir-import-file (file)
   "Import FILE by copying it into `mir-archive-directory' and renaming it."
@@ -165,6 +165,8 @@ existing topic, the text is extracted as a new descendant."
            mir-archive-directory
            (file-name-base file)
            extension))
+         ;; Might be worth it to replace "_" with " "?
+         (title (file-name-base file))
          (denote-directory mir-archive-directory)
          (tags (denote-keywords-prompt))
          (sequence (denote-sequence-get-new 'parent)))
@@ -174,7 +176,7 @@ existing topic, the text is extracted as a new descendant."
                                 sequence (current-time)))
            (priority (mir-ask-for-priority))
            (id (denote-retrieve-filename-identifier new-new-file-name)))
-      (mir--add-topic-to-db id priority))))
+      (mir--add-topic-to-db id priority title))))
 
 ;;;###autoload
 (defun mir-read ()
@@ -250,6 +252,17 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
         (message "Set new priority to %f" new-priority)
     (user-error "%s" "No active topic.")))
 
+(defun mir-set-title ()
+  "Set a new title for the current topic."
+  (interactive)
+  (setq mir--current-topic (mir-queue-next))
+  (if mir--current-topic
+      (let ((new-title (mir-ask-for-title))
+            (id (car mir--current-topic)))
+        (mir--update-title-db id new-title)
+        (message "Title now set to '%s'" new-title))
+    (user-error "%s" "No active topic.")))
+
 (defun mir-reschedule ()
   ;; how would this work? I think we might need to add a "scheduled"
   ;; column for this...
@@ -260,8 +273,8 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 
 ;;;;; Public
 
-(defun mir-ask-for-name ()
-  "Asks the user for the topic's name."
+(defun mir-ask-for-title ()
+  "Asks the user for the topic's title."
   ;; Inherits the current input method
   (read-string "Name for topic: " nil nil nil t))
 
@@ -276,12 +289,12 @@ OLD-PRIORITY as the default value."
       p
     (user-error "%s" "Priority must be a number between 0 and 100.")))
 
-(defun mir-import (text priority name)
+(defun mir-import (text priority title)
   ;; TODO: ability to add tags/keywords
   (let* ((extension (mir--get-extension-to-current-buffer))
-         (file-name (mir--format-file-name name nil extension 'parent))
+         (file-name (mir--format-file-name title nil extension 'parent))
          (file-id (denote-extract-id-from-string file-name)))
-    (mir--add-topic-to-db file-id priority)
+    (mir--add-topic-to-db file-id priority title)
     (write-region text nil file-name)))
 
 (defun mir-get-topics-for-today-by-priority ()
@@ -345,7 +358,8 @@ the file is not found."
                           "a_factor REAL NOT NULL, interval REAL NOT NULL, "
                           "added TEXT NOT NULL, last_review TEXT, "
                           "times_read INTEGER NOT NULL, "
-                          "archived INT NOT NULL, archived_date TEXT) STRICT; "))
+                          "archived INT NOT NULL, archived_date TEXT, "
+                          "title TEXT) STRICT; "))
   (sqlite-execute (mir--get-db)
                   (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
                           "topic_id TEXT NOT NULL, "
@@ -354,23 +368,25 @@ the file is not found."
                           "FOREIGN KEY (topic_id) REFERENCES topics(id)"
                           ") STRICT;")))
 
-(defun mir--add-topic-to-db (id priority &optional is-extract)
+(defun mir--add-topic-to-db (id priority title &optional is-extract)
   (mir--init-db)
   (sqlite-execute (mir--get-db)
-                    "INSERT INTO topics (id, priority, a_factor, interval, added, times_read, archived) VALUES(?, ?, ?, ?, date('now', 'localtime'), 0, 0)"
+                    "INSERT INTO topics (id, priority, a_factor, interval, added, times_read, archived, title) VALUES(?, ?, ?, ?, date('now', 'localtime'), 0, 0, ?)"
                     `(,id
                       ,priority
                       ,mir-default-a-factor
-                      ,mir-default-topic-interval)))
+                      ,mir-default-topic-interval
+                      ,title)))
 
-(defun mir--add-extract-to-db (id priority)
+(defun mir--add-extract-to-db (id priority title)
   (mir--init-db)
   (sqlite-execute (mir--get-db)
-                  "INSERT INTO topics (id, priority, a_factor, interval, added, last_review, times_read, archived) VALUES(?, ?, ?, ?, date('now', 'localtime'), date('now', 'localtime'), 1, 0)"
+                  "INSERT INTO topics (id, priority, a_factor, interval, added, last_review, times_read, archived, title) VALUES(?, ?, ?, ?, date('now', 'localtime'), date('now', 'localtime'), 1, 0, ?)"
                   `(,id
                     ,priority
                     ,mir-default-a-factor
-                    ,mir-default-extract-interval)))
+                    ,mir-default-extract-interval
+                    ,title)))
 
 (defun mir--archive-topic-db (id)
   ;; this does not work. I should create an archived column.
@@ -409,6 +425,11 @@ the file is not found."
                   "UPDATE topics SET interval=? WHERE id=?"
                   `(,interval ,id)))
 
+(defun mir--update-title-db (id new-title)
+  (sqlite-execute (mir--get-db)
+                  "UPDATE topics SET title=? WHERE id=?"
+                  `(,new-title ,id)))
+
 (defun mir--format-file-name (name tags extension seq-type &optional parent-sequence)
   "Wrapper around `denote-format-file-name' for now."
   (let* ((denote-directory mir-archive-directory)
@@ -427,13 +448,13 @@ the file is not found."
 
 (defun mir--add-extract (text)
   (let* ((extension (mir--get-extension-to-current-buffer))
-         (name (mir-ask-for-name))
+         (title (mir-ask-for-title))
          (parent-sequence (denote-retrieve-filename-signature buffer-file-name))
          (parent-keywords (denote-extract-keywords-from-path buffer-file-name))
-         (file-name (mir--format-file-name name parent-keywords extension 'child parent-sequence))
+         (file-name (mir--format-file-name title parent-keywords extension 'child parent-sequence))
          (file-id (denote-extract-id-from-string file-name)))
     ;; maybe randomly subtract priority vals?
-    (mir--add-extract-to-db file-id (nth 1 mir--current-topic))
+    (mir--add-extract-to-db file-id (nth 1 mir--current-topic) title)
     (write-region text nil file-name)))
 
 (defun mir--archive-topic (topic)
