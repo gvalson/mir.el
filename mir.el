@@ -228,6 +228,36 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
                 (nth 3 mir--current-topic)))
     (message "No topic is currently active.")))
 
+(define-derived-mode mir-topic-list-mode tabulated-list-mode "Mir Topics"
+  "Major mode for a tabular listing of mir topics."
+  (setq tabulated-list-format (vector '("ID" 18 t)
+                                      '("Title" 35 t)
+                                      '("Priority" 10 t)
+                                      '("A-Factor" 8 t)
+                                      '("Interval" 8 t))
+        tabulated-list-revert-hook #'mir--format-queue-for-tabular-list
+        tabulated-list-entries #'mir--format-queue-for-tabular-list)
+  (tabulated-list-init-header))
+
+(defun mir--format-queue-for-tabular-list ()
+  "Format `mir-queue' to be displayed in `mir-topic-list-mode'."
+  (mir-update-queue)
+  (mapcar
+     (lambda (topic)
+       (let ((id (car topic))
+             (title (or (nth 9 topic) "Untitled"))
+             (priority (number-to-string (nth 1 topic)))
+             (a-factor (number-to-string (nth 2 topic)))
+             (interval (number-to-string (nth 3 topic))))
+         (list id (vector id title priority a-factor interval))))
+     mir-queue))
+
+(defun mir-show-queue ()
+  "Show the current queue of topics."
+  (interactive)
+  (switch-to-buffer "*mir-queue*")
+  (mir-topic-list-mode))
+
 (defun mir-set-a-factor ()
   "Set a new A-factor for the current topic."
   (interactive)
@@ -337,8 +367,13 @@ the file is not found."
         (bury-buffer))
       (user-error "%s" "Queue is now empty: nothing to read"))))
 
+(defun mir-update-queue ()
+    "Update the queue by calling `mir-query-function'."
+  (setq mir-queue (funcall mir-query-function)))
+
 (defun mir-queue-next ()
-  (setq mir-queue (funcall mir-query-function))
+  "Return the next item in the queue or nil otherwise."
+  (mir-update-queue)
   (when mir-queue
       (pop mir-queue)))
 
@@ -359,6 +394,7 @@ the file is not found."
                           "added TEXT NOT NULL, last_review TEXT, "
                           "times_read INTEGER NOT NULL, "
                           "archived INT NOT NULL, archived_date TEXT, "
+                          ;; should this allow null values?
                           "title TEXT) STRICT; "))
   (sqlite-execute (mir--get-db)
                   (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
@@ -442,6 +478,10 @@ the file is not found."
 
 ;; Problem: importing from epubs and naming the file epub works with
 ;; emacs but it's not a TRUE epub.
+
+;; Idea here: have a list of extensions that get renamed into
+;; `mir-default-file-extension' (default of that would be .txt). All
+;; the other file formats retain their extension.
 (defun mir--get-extension-to-current-buffer ()
   "We assume that everything is .txt for now"
   ".txt")
