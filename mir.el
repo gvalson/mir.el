@@ -2,7 +2,7 @@
 
 ;; Author: Giorgi Gvalia <gvalia@pm.me>
 ;; Version: 0.1-pre
-;; Package-Requires: ((emacs "29.1"))
+;; Package-Requires: ((emacs "29.1") denote denote-sequence)
 ;; Keywords: incremental-reading srs anki supermemo
 
 ;; This file is not part of GNU Emacs.
@@ -44,13 +44,13 @@
 
 ;;;; Usage
 
-;; mir saves all the reading material you import into `mir-archive-directory', so make sure that it is configured. Afterwards, use any of these commands to import the reading material:
+;; mir saves all the reading material you import into `mir-archive-directory', so make sure that it is configured to the folder you like. Afterwards, use any of these commands to import the reading material:
 
 ;; `mir-import-buffer': Import the contents of the current buffer.
 ;; `mir-extract-or-import-from-region': Import the selected text from the current buffer.
 ;; `mir-import-from-minibuffer': Type out or yank what you want to import in the minibuffer.
 
-;; Afterwards, use `mir-read' to start reading and `mir-read-next' to move onto the next topic. If you'd like to extract a part of a topic into a new topic, use `mir-extract-or-import-from-region'.
+;; Afterwards, use `mir-read' to start reading and `mir-read-next' to move onto the next topic. If you'd like to extract a part of a topic into a new topic, select the text and use `mir-extract-or-import-from-region'.
 
 ;;;; Tips
 
@@ -59,11 +59,12 @@
 ;;;; Credits
 
 ;; This package would not have been possible without the following
-;; packages: foo[1], which showed me how to bifurcate, and bar[2],
-;; which takes care of flanges.
+;; packages: denote[1], which provides a consistent ID scheme and file
+;; naming system, and denote-sequence[2], which makes it easy to work
+;; with tree-like sequences of notes.
 ;;
-;;  [1] https://example.com/foo.el
-;;  [2] https://example.com/bar.el
+;;  [1] https://protesilaos.com/emacs/denote
+;;  [2] https://protesilaos.com/emacs/denote-sequence
 
 ;;; Code:
 
@@ -261,8 +262,7 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 (defun mir-set-a-factor ()
   "Set a new A-factor for the current topic."
   (interactive)
-  (setq mir--current-topic (mir-queue-next))
-  (if mir--current-topic
+  (if (mir--refresh-current-topic)
       (let ((new-af (read-number "New A-Factor: "
                                  (nth 2 mir--current-topic)))
             (id (car mir--current-topic)))
@@ -272,9 +272,14 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 
 (defun mir-set-priority ()
   "Set a new priority for the current topic."
+  ;; FIXME: After calling the command once and changing the priority,
+  ;; calling the command again results in mir--current-topic being
+  ;; replaced by the next element in the queue. I should be able to
+  ;; call this command over and over again to change the priority. One
+  ;; thing that I can do is that I can just store the changes
+  ;; temporarily and only apply them when `mir-read-next' is called.
   (interactive)
-  (setq mir--current-topic (mir-queue-next))
-  (if mir--current-topic
+  (if (mir--refresh-current-topic)
       (let* ((old-priority (nth 1 mir--current-topic))
              (new-priority (mir-ask-for-priority (format "%.3f" old-priority)))
              (id (car mir--current-topic)))
@@ -285,8 +290,7 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 (defun mir-set-title ()
   "Set a new title for the current topic."
   (interactive)
-  (setq mir--current-topic (mir-queue-next))
-  (if mir--current-topic
+  (if (mir--refresh-current-topic)
       (let ((new-title (mir-ask-for-title))
             (id (car mir--current-topic)))
         (mir--update-title-db id new-title)
@@ -512,6 +516,16 @@ the file is not found."
                         'keep-current
                         'keep-current)
     (mir--archive-topic-db id)))
+
+(defun mir--refresh-current-topic ()
+  "Fetches the current topic from the database again, refreshing
+`mir--current-topic'."
+  (when-let* ((id (car mir--current-topic)))
+    (setq mir--current-topic
+          (car
+           (sqlite-select (mir--get-db)
+                          "SELECT * FROM topics WHERE id = ?"
+                          `(,id))))))
 
 ;;;; Footer
 
