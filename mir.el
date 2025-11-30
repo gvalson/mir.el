@@ -257,7 +257,8 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   "Show the current queue of topics."
   (interactive)
   (switch-to-buffer "*mir-queue*")
-  (mir-topic-list-mode))
+  (mir-topic-list-mode)
+  (revert-buffer nil t t))
 
 (defun mir-set-a-factor ()
   "Set a new A-factor for the current topic."
