@@ -188,6 +188,7 @@ existing topic, the text is extracted as a new descendant."
 
 ;;;###autoload
 (defun mir-read ()
+  ;; TODO: Read the user prefix to refresh the topic
   "Start a reading session or show the current topic. Use `mir-read-next'
 to advance to a new topic."
   (interactive)
@@ -428,13 +429,33 @@ redistributing the determined order."
                           "archived INT NOT NULL, archived_date TEXT, "
                           ;; should this allow null values?
                           "title TEXT) STRICT; "))
-  (sqlite-execute (mir--get-db)
+ (sqlite-execute (mir--get-db)
+                 "CREATE INDEX IF NOT EXISTS idx_topics_archived ON topics(archived);")
+ (sqlite-execute (mir--get-db)
+                 "CREATE INDEX IF NOT EXISTS idx_topics_priority_id ON topics(priority, id);")
+ (sqlite-execute (mir--get-db)
                   (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
                           "topic_id TEXT NOT NULL, "
                           "review_datetime TEXT NOT NULL, "
                           "priority REAL NOT NULL, a_factor REAL NOT NULL, "
                           "FOREIGN KEY (topic_id) REFERENCES topics(id)"
                           ") STRICT;")))
+
+(defun mir--rescale-priority-values-db ()
+  "Rescale priority values so that every topic's priority is between 0.0
+and 100.0 and the distance between their values is equal. For example,
+if there were 5 topics in the database, their priorities would be 0.0,
+25.0, 50.0, 75.0 and 100.0 respectively."
+  (sqlite-execute (mir--get-db)
+                  (concat
+                   "WITH ordered AS (SELECT id, priority, "
+                   "ROW_NUMBER() OVER (ORDER BY priority, id) "
+                   "AS rn, COUNT(*) OVER () AS total FROM topics "
+                   "WHERE archived = 0) UPDATE topics "
+                   "SET priority = (SELECT (rn - 1) * "
+                   "(100.0/(total-1)) FROM ordered "
+                   "WHERE ordered.id = topics.id) "
+                   "WHERE archived = 0;")))
 
 (defun mir--add-topic-to-db (id priority title &optional is-extract)
   (mir--init-db)
@@ -444,7 +465,8 @@ redistributing the determined order."
                       ,priority
                       ,mir-default-a-factor
                       ,mir-default-topic-interval
-                      ,title)))
+                      ,title))
+  (mir--rescale-priority-values-db))
 
 (defun mir--add-extract-to-db (id priority title)
   (mir--init-db)
@@ -454,12 +476,14 @@ redistributing the determined order."
                     ,priority
                     ,mir-default-a-factor
                     ,mir-default-extract-interval
-                    ,title)))
+                    ,title))
+  (mir--rescale-priority-values-db))
 
 (defun mir--archive-topic-db (id)
   ;; this does not work. I should create an archived column.
   (sqlite-execute (mir--get-db)
-                  "UPDATE topics SET last_review = date('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id)))
+                  "UPDATE topics SET last_review = date('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id))
+  (mir--rescale-priority-values-db))
 
 (defun mir--do-topic-review-db (topic)
   (let* ((id (car topic))
@@ -486,7 +510,8 @@ redistributing the determined order."
 (defun mir--update-priority-db (id priority)
   (sqlite-execute (mir--get-db)
                   "UPDATE topics SET priority=? WHERE id=?"
-                  `(,priority ,id)))
+                  `(,priority ,id))
+  (mir--rescale-priority-values-db))
 
 (defun mir--update-interval-db (id interval)
   (sqlite-execute (mir--get-db)
