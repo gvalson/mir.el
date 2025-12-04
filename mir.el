@@ -108,6 +108,13 @@ from 0 to 100 (lower meaning more important topics).")
 The default option is to fetch all the topics that are due today sorted
 by priority.")
 
+(defcustom mir-randomize-topics-ratio 0
+  "The ratio of topics that should be randomized in the queue from 0.0 to
+1.0. 0 means that the queue will fully follow the order given by
+`mir-query-function'. 1.0 means that the ordering will be
+deterministically random. A fixed seed is used here to prevent chaotic
+reordering.")
+
 (defcustom mir-bury-buffer-after-finishing t
   "Whether to bury the current buffer when calling `mir-read-next'. When set to a non-nil value, the user will see the currently open buffer be dismissed at the end of a reading session (when there's no more topics in the queue).")
 
@@ -373,16 +380,32 @@ the file is not found."
       (user-error "%s" "Queue is now empty: nothing to read"))))
 
 (defun mir-update-queue ()
-    "Update the queue by calling `mir-query-function'."
-  (setq mir-queue (funcall mir-query-function)))
+    "Update the queue by calling `mir-query-function' and randomizing it via
+`mir--randomize-queue'."
+    (setq mir-queue (mir--randomize-queue (funcall mir-query-function))))
+
+(defun mir--randomize-queue (queue)
+  "Shuffle QUEUE according to `mir-randomize-topics-ratio'. Uses a fixed
+seed of 'mir' in order to prevent repeated invocations from randomly
+redistributing the determined order."
+  ;; Swap randomly determined elements A and B in the queue.
+  (let* ((n-list (seq-length queue))
+         (n-swap (round (* mir-randomize-topics-ratio n-list))))
+      (random "mir")
+      (dotimes (i n-swap)
+        ;; Here we don't care if they end up the same. Based on:
+        ;; https://www.emacswiki.org/emacs/ListModificationLibrary
+        (let ((swap-a (elt queue (random n-list)))
+              (swap-b (elt queue (random n-list))))
+          (setcar (member swap-a queue) swap-b)
+          (setcar (member swap-b queue) swap-a)))
+      queue))
 
 (defun mir-queue-next ()
   "Return the next item in the queue or nil otherwise."
   (mir-update-queue)
   (when mir-queue
       (pop mir-queue)))
-
-;; TODO: extract clozes to anki
 
 ;;;;; Private
 
