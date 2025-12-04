@@ -389,17 +389,21 @@ the file is not found."
 seed of 'mir' in order to prevent repeated invocations from randomly
 redistributing the determined order."
   ;; Swap randomly determined elements A and B in the queue.
+  (unless (and (<= mir-randomize-topics-ratio 1.0)
+               (>= mir-randomize-topics-ratio 0.0))
+    (user-error "%s"
+                "`mir-randomize-topics-ratio' set to an invalid value. Make sure it's between 0.0 and 1.0"))
   (let* ((n-list (seq-length queue))
          (n-swap (round (* mir-randomize-topics-ratio n-list))))
-      (random "mir")
-      (dotimes (i n-swap)
-        ;; Here we don't care if they end up the same. Based on:
-        ;; https://www.emacswiki.org/emacs/ListModificationLibrary
-        (let ((swap-a (elt queue (random n-list)))
-              (swap-b (elt queue (random n-list))))
-          (setcar (member swap-a queue) swap-b)
-          (setcar (member swap-b queue) swap-a)))
-      queue))
+    (random "mir")
+    (dotimes (i n-swap)
+      ;; Here we don't care if they end up the same. Based on:
+      ;; https://www.emacswiki.org/emacs/ListModificationLibrary
+      (let ((swap-a (elt queue (random n-list)))
+            (swap-b (elt queue (random n-list))))
+        (setcar (member swap-a queue) swap-b)
+        (setcar (member swap-b queue) swap-a)))
+    queue))
 
 (defun mir-queue-next ()
   "Return the next item in the queue or nil otherwise."
