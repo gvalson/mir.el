@@ -320,6 +320,14 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   ;; already have `mir--update-interval-db'.
     (interactive))
 
+(defun mir-find-parent ()
+  "Display the parent topic of the current topic. This is only relevant for
+topics that were made via being extracted from some other topic (which
+we call the parent)."
+  (interactive)
+  (let ((denote-directory mir-archive-directory))
+    (denote-sequence-find 'parent)))
+
 ;;;; Functions
 
 ;;;;; Public
