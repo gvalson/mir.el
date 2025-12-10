@@ -6,18 +6,18 @@ Mir is a package for incremental reading inside Emacs.
 
 * What is Incremental Reading?
 
-Incremental Reading is a continuous process of importing, refining,
+Incremental reading is a continuous process of importing, refining,
 memorizing and dismissing articles, which are further referred to as
 "topics". A "topic" is any piece of text that you want to process.
 Processing in this case means:
 
-1. Importing it into the system, letting the system schedule when the
-   topic will be shown to you.
-2. On the scheduled day, reading the item.
+1. Importing the text into the system, letting it schedule when the
+   newly created topic will be shown to you.
+2. Reading the topic whenever it's scheduled.
 3. Making extracts and/or turning some of the text into permanent
    notes, flashcards, etc.
-4. Repeating until you feel that the potential of the topic is
-   exhausted, at which point you dismiss it.
+4. Repeating across many days until you feel that the potential of the
+   topic is exhausted, at which point you dismiss it.
 
 Incremental reading automatically schedules when you're going to
 review what you've read, thereby increasing your familiarity with the
@@ -26,6 +26,10 @@ mir's scope does not extend into asking you questions about the
 material. For that, I recommend pairing mir with a package like
 [[https://github.com/bohonghuang/org-srs][org-srs]] or a standalone spaced repetition program like [[https://apps.ankiweb.net/][Anki]],
 [[https://mnemosyne-proj.org/][Mnemosyne]], and others.
+
+*Caution:* The process of incremental reading is best used with
+material that evokes curiosity and is inherently interesting. See the
+"Philosophy" section below for more details.
 
 * Installation
 
@@ -64,11 +68,12 @@ file:
 ** Set =mir-archive-directory=
 
 First of all, choose a folder where you'll keep all your topics.
-Everything that you import is saved in this directory, so make sure
-that you can access it comfortably in case you want to make any manual
-adjustments. This variable defaults to =~/Documents/mir=.
+Everything that you import is saved in this directory as a file, so
+make sure that you can access the directory comfortably in case you
+want to make any manual adjustments. This variable defaults to
+=~/Documents/mir=.
 
-** Import your material
+** Import and prioritize your material
 
 Now comes the time to import. You can use the following functions for
 this:
@@ -78,29 +83,97 @@ this:
   the current buffer.
 - =mir-import-from-minibuffer=: Enter your text via the minibuffer and
   import it.
+- =mir-import-file=: Select a file and import it as a topic.
 
 Each of these commands will ask you to type in a priority. Much like
 in [[https://help.supermemo.org/wiki/Glossary:Priority][SuperMemo]], the topic's priority represents its relative importance
 and ranges from 0 to 100 (not including 0 and 100). More important
-items have a lower priority value.
+items have a lower priority value. Thus, an item with the priority
+value 0 is the most important in the collection and will appear
+earlier.
 
 ** Start reading
 
 Next, run =mir-read= to start reading. You should see a new buffer
 show up with one of your imported topics. Feel free to use
-=mir-extract-or-import-from-region= to extract important bits out or
-use any other command, as the buffer is just like any other emacs
-buffer. When you're done reading or simply want to move on, invoke
-=mir-read-next=. You can continue until the queue runs out, after
-which you can either import more items or do something else.
+=mir-extract-or-import-from-region= to extract important bits out into
+its own topic. You may also use any other command, as the buffer is
+just like any other emacs buffer. When you're done reading or simply
+wish to move on, invoke =mir-read-next=. You can continue until the
+queue runs out, after which you can either import more items or do
+something else.
+
+Generally, you should not worry about topics running out.
 
 * Advanced Usage
 
+** A general overview of the incremental reading process
+
+# TODO: write about what it is like to do IR; how it evokes curiosity
+# and wonder, etc...
+
 ** Dismissing Topics
 
-** Scheduling Topics and the A-factor
+When a topic has exhausted its value, use =mir-dismiss-current-topic=
+to dismiss it. A dismissed topic will no longer show up when reading,
+but it will still be preserved in =mir-archive-directory= with a
+keyword =archive= being added to it. The dismissed topic will also be
+kept around in the database. Dismissal is preferred over deletion, as
+it prevents accidental loss of important topics.
 
-** Keeping Track of Extracts with denote-sequence.
+** Editing or reprioritizing the current topic
+
+Incremental reading can support a workflow where you first ingest the
+material and then gradually refine it by making small changes across
+the many reviews. To that end, mir provides the following functions
+for changing the topic metadata:
+
+- =mir-set-priority=: use this to reprioritize the topic. After
+  invoking the command, the topic's actual priority value may be
+  slightly different than what you typed since priority values are
+  normalized to be evenly distibuted between 0 to 100.
+- =mir-set-a-factor=: manually set the A-factor, which governs how
+  fast the intervals between reviews grow. If you want to use this,
+  make sure to set =mir-scale-a-factor-by-priority= to =nil=.
+- =mir-set-title=: change the title of the current topic.
+# - =mir-reschedule=
+
+What might be more important to you, however, is changing the topic's
+content. There's nothing special necessary to accomplish this: mir
+only cares about the file's name in order to make its operations work.
+Mir does not check the file's actual content. You're free to edit the
+file as you wish (including changing its extension), as long as the ID
+at the beginning of the file name is preserved.
+
+** Randomizing Topics
+
+By default, topics are shown in strictly descending priority order.
+This makes it so that the most important topics are displayed first.
+However, you may end up in a situation where only a narrow subset of
+the topics are shown to you day after day, especially in a larger
+collection and especially if you don't review a lot of topics
+consistently every day. To remedy that, you can configure the variable
+=mir-randomize-topics-ratio=. Its default value is 0.0, meaning that
+0% of the queue is randomly shuffled. You can start with 0.2 (meaning
+that 20% of the topics in the queue get shuffled) and later adjust to
+your preference.
+
+** Keeping track of extracts with =denote-sequence=
+
+# TODO
+
+** Customizing the reading experience with the show-topic hook
+
+You can use =mir-show-topic-hook= to do something every time a new
+topic is shown. For example, you can make it so that HTML files opened
+with =web-mode= get displayed with emacs' built-in web browser =eww=:
+
+#+begin_src elisp
+  (add-hook 'mir-show-topic-hook
+            (lambda ()
+              (when (eq major-mode #'web-mode)
+                (eww-open-file buffer-file-name))))
+#+end_src
 
 ** Inspecting the Database
 
@@ -110,15 +183,35 @@ named =mir.db=. The name and location is configurable via
 =mir-db-location=. You can use the built-in =sqlite-mode-open-file=
 command to inspect the database.
 
-* Changelog
+* Philosophy
 
-** 0.1.0
+Mir implements a part of incremental reading as seen in SuperMemo.
 
-Initial release.
+Using mir eventually results in many repetitions of seeing the same
+material. This can be both benefitial and detrimental and that depends
+on your relationship with the material. If you find the material
+incomprehensible, boring, too heavy or generally unsuitable to your
+present needs, mir will amplify these feelings tenfold by showing the
+material over and over again. Thus, mir is best used with material
+that you find inherently interesting---that you'd study even if no one
+told you to look into it.
+
+* Resources for Incremental Reading
+
+- # what is incremental reading (youtube)
+- # big il.html
 
 * Credits
 
-* Development
+This project was greatly aided by Prot's [[https://github.com/protesilaos/denote/][denote]] and [[https://github.com/protesilaos/denote-sequence][denote-sequence]]
+packages. Denote provides a consistent file naming and identification
+scheme and tools to work with said scheme, which greatly simplifies
+the logic of dealing with unique topics. In addition, denote-sequence
+makes working with the tree-like structure of extracts much easier,
+allowing for dynamically generating sequence numbers and easy
+traversal of the hierarchy.
+
+Incremental reading was pioneered by Piotr Wozniak and SuperMemo.
 
 * License
 

@@ -22,7 +22,9 @@
 
 ;;; Commentary:
 
-;; This package allows the user to import articles that will be automatically scheduled to be read. This is called incremental reading.
+;; This package allows the user to import articles that will be
+;; automatically scheduled to be read. This is called incremental
+;; reading.
 
 ;;;; Installation
 
@@ -40,17 +42,26 @@
 ;; Then put this file in your load-path, and put this in your init
 ;; file:
 
-;; (require 'package-name)
+;; (require 'mir)
 
 ;;;; Usage
 
-;; mir saves all the reading material you import into `mir-archive-directory', so make sure that it is configured to the folder you like. Afterwards, use any of these commands to import the reading material:
+;; mir saves all the reading material you import into
+;; `mir-archive-directory', so make sure that it is configured to the
+;; folder you like. Afterwards, use any of these commands to import
+;; the reading material:
 
 ;; `mir-import-buffer': Import the contents of the current buffer.
 ;; `mir-extract-or-import-from-region': Import the selected text from the current buffer.
 ;; `mir-import-from-minibuffer': Type out or yank what you want to import in the minibuffer.
 
-;; Afterwards, use `mir-read' to start reading and `mir-read-next' to move onto the next topic. If you'd like to extract a part of a topic into a new topic, select the text and use `mir-extract-or-import-from-region'.
+;; Afterwards, use `mir-read' to start reading and `mir-read-next' to
+;; move onto the next topic. If you'd like to extract a part of a
+;; topic into a new topic, select the text and use
+;; `mir-extract-or-import-from-region'. Note that, by default,
+;; imported topics are not shown until 1 day passes after importing.
+;; This is, for now, a deliberate choice which can be overridden by
+;; configuring `mir-default-topic-interval'.
 
 ;;;; Tips
 
@@ -116,7 +127,10 @@ deterministically random. A fixed seed is used here to prevent chaotic
 reordering.")
 
 (defcustom mir-bury-buffer-after-finishing t
-  "Whether to bury the current buffer when calling `mir-read-next'. When set to a non-nil value, the user will see the currently open buffer be dismissed at the end of a reading session (when there's no more topics in the queue).")
+  "Whether to bury the current buffer when calling `mir-read-next'.
+  When set to a non-nil value, the user will see the currently open
+  buffer be dismissed at the end of a reading session (when there's no
+  more topics in the queue).")
 
 ;;;; Variables
 
@@ -140,7 +154,7 @@ existing topic, the text is extracted as a new descendant."
   (if-let* (((region-active-p))
             (text (buffer-substring-no-properties (region-beginning) (region-end))))
       ;; if we're somehow in an existing mir topic, do an extract.
-      ;; TODO: replace this with a better check.
+      ;; TODO: replace this with mir-minor-mode check
       (if (string= default-directory mir-archive-directory)
           (mir--add-extract text)
         (mir-import text (mir-ask-for-priority) (mir-ask-for-title)))
@@ -152,7 +166,6 @@ existing topic, the text is extracted as a new descendant."
   (interactive
    (list (mir-ask-for-title)
          (mir-ask-for-priority)))
-  ;; TODO: find a way to preserve images and formatting.
   (mir-import (buffer-substring (point-min) (point-max)) priority title))
 
 ;;;###autoload
@@ -281,12 +294,6 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 
 (defun mir-set-priority ()
   "Set a new priority for the current topic."
-  ;; FIXME: After calling the command once and changing the priority,
-  ;; calling the command again results in mir--current-topic being
-  ;; replaced by the next element in the queue. I should be able to
-  ;; call this command over and over again to change the priority. One
-  ;; thing that I can do is that I can just store the changes
-  ;; temporarily and only apply them when `mir-read-next' is called.
   (interactive)
   (if (mir--refresh-current-topic)
       (let* ((old-priority (nth 1 mir--current-topic))
@@ -303,6 +310,7 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
       (let ((new-title (mir-ask-for-title))
             (id (car mir--current-topic)))
         (mir--update-title-db id new-title)
+        ;; TODO: actually rename the file to the new title
         (message "Title now set to '%s'" new-title))
     (user-error "%s" "No active topic.")))
 
@@ -445,7 +453,9 @@ redistributing the determined order."
   "Rescale priority values so that every topic's priority is between 0.0
 and 100.0 and the distance between their values is equal. For example,
 if there were 5 topics in the database, their priorities would be 0.0,
-25.0, 50.0, 75.0 and 100.0 respectively."
+25.0, 50.0, 75.0 and 100.0 respectively. This function should be called
+after adding a topic or modifying an existing topic's priority in some
+way."
   (sqlite-execute (mir--get-db)
                   (concat
                    "WITH ordered AS (SELECT id, priority, "
@@ -480,7 +490,6 @@ if there were 5 topics in the database, their priorities would be 0.0,
   (mir--rescale-priority-values-db))
 
 (defun mir--archive-topic-db (id)
-  ;; this does not work. I should create an archived column.
   (sqlite-execute (mir--get-db)
                   "UPDATE topics SET last_review = date('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id))
   (mir--rescale-priority-values-db))
