@@ -259,8 +259,8 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
                 (nth 3 mir--current-topic)))
     (message "No topic is currently active.")))
 
-(define-derived-mode mir-topic-list-mode tabulated-list-mode "Mir Topics"
-  "Major mode for a tabular listing of mir topics."
+(define-derived-mode mir-queue-list-mode tabulated-list-mode "Mir Queue"
+  "Major mode for a tabular listing of mir topics currently in the queue."
   (setq tabulated-list-format (vector '("ID" 18 t)
                                       '("Title" 35 t)
                                       '("Priority" 10 t)
@@ -271,7 +271,7 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   (tabulated-list-init-header))
 
 (defun mir--format-queue-for-tabular-list ()
-  "Format `mir-queue' to be displayed in `mir-topic-list-mode'."
+  "Format `mir-queue' to be displayed in `mir-queue-list-mode'."
   (mir-update-queue)
   (mapcar
      (lambda (topic)
@@ -287,8 +287,69 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   "Show the current queue of topics."
   (interactive)
   (switch-to-buffer "*mir-queue*")
-  (mir-topic-list-mode)
+  (mir-queue-list-mode)
   (revert-buffer nil t t))
+
+;; -----
+;; Start all topics mode
+
+(define-derived-mode mir-topics-list-mode tabulated-list-mode "Mir Topics"
+  "Major mode for a tabular listing of all mir topics."
+  (setq tabulated-list-format (vector '("ID" 18 t)
+                                      '("Title" 35 t)
+                                      '("Priority" 10 t)
+                                      '("A-Factor" 8 t)
+                                      '("Interval" 8 t)
+                                      '("Added" 10 t)
+                                      '("Last Read" 10 t)
+                                      '("Reviews" 7 t)
+                                      '("Archived" 8 t)
+                                      '("Arch. on" 8 t))
+        tabulated-list-revert-hook #'mir--format-all-topics-for-tabular-list
+        tabulated-list-entries #'mir--format-all-topics-for-tabular-list)
+  (tabulated-list-init-header))
+
+(defun mir--format-all-topics-for-tabular-list ()
+  "Format all the topics to be displayed in `mir-queue-list-mode'."
+  (let ((topics
+         (sqlite-select (mir--get-db)
+                        "SELECT * FROM topics")))
+    (mapcar
+     (lambda (topic)
+       (let ((id (car topic))
+             (title (or (nth 9 topic) "Untitled"))
+             (priority (number-to-string (nth 1 topic)))
+             (a-factor (number-to-string (nth 2 topic)))
+             (interval (number-to-string (nth 3 topic)))
+             (added (nth 4 topic))
+             (last-read (or (nth 5 topic) ""))
+             (reviews (number-to-string (nth 6 topic)))
+             (archived (number-to-string (nth 7 topic)))
+             (archived-date (or (nth 8 topic) "")))
+         (list id (vector
+                   id title priority a-factor interval
+                   added last-read reviews archived
+                   archived-date))))
+     topics)))
+
+;; How to make this work for multiple topics?
+(defun mir-topics-change-priority ()
+  ""
+  (interactive)
+  (let* ((current-topic (tabulated-list-get-entry nil))
+         (id (aref current-topic 0))
+         (new-priority (mir-ask-for-priority)))
+    (mir--update-priority-db id new-priority)
+    (message "Set new priority to %f" new-priority)))
+
+(defun mir-show-all-topics ()
+  "Show all the topics in the database"
+  (interactive)
+  (switch-to-buffer "*mir-topics*")
+  (mir-topics-list-mode)
+  (revert-buffer nil t t))
+
+;; -----
 
 (defun mir-set-a-factor ()
   "Set a new A-factor for the current topic."
@@ -352,8 +413,8 @@ between 0 and 100 or an user error otherwise. Optionally use
 OLD-PRIORITY as the default value."
   (if-let* ((p (string-to-number
                 (completing-read "Priority (0-100): " nil nil nil old-priority)))
-            (is-within-bounds (and (< p 100)
-                                   (> p 0))))
+            (is-within-bounds (and (<= p 100)
+                                   (>= p 0))))
       p
     (user-error "%s" "Priority must be a number between 0 and 100.")))
 
@@ -406,8 +467,8 @@ the file is not found."
       (user-error "%s" "Queue is now empty: nothing to read"))))
 
 (defun mir-update-queue ()
-    "Update the queue by calling `mir-query-function' and randomizing it via
-`mir--randomize-queue'."
+    "Update the queue by calling `mir-query-function' and randomizing the
+result via `mir--randomize-queue'."
     (setq mir-queue (mir--randomize-queue (funcall mir-query-function))))
 
 (defun mir--randomize-queue (queue)
