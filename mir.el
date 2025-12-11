@@ -132,6 +132,15 @@ reordering.")
   buffer be dismissed at the end of a reading session (when there's no
   more topics in the queue).")
 
+(defcustom mir-default-file-extension ".txt"
+  "The file extension of newly imported topics.")
+
+(defcustom mir-inherit-extension-for-extracts nil
+  "Whether extracts of a topic should inherit the file extension of the
+current buffer. This can be handy when processing data in a specific
+format but can also cause problems with files that have special
+rendering such as epubs or pdfs.")
+
 ;;;; Variables
 
 (defvar mir-queue '()
@@ -557,11 +566,14 @@ way."
 ;; `mir-default-file-extension' (default of that would be .txt). All
 ;; the other file formats retain their extension.
 (defun mir--get-extension-to-current-buffer ()
-  "We assume that everything is .txt for now"
-  ".txt")
+  "Returns the extension of the currently opened file as a string with a
+leading period."
+  (concat "." (file-name-extension (buffer-file-name))))
 
 (defun mir--add-extract (text)
-  (let* ((extension (mir--get-extension-to-current-buffer))
+  (let* ((extension (if mir-inherit-extension-for-extracts
+                        (mir--get-extension-to-current-buffer)
+                      mir-default-file-extension))
          (title (mir-ask-for-title))
          (parent-sequence (denote-retrieve-filename-signature buffer-file-name))
          (parent-keywords (denote-extract-keywords-from-path buffer-file-name))
