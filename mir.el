@@ -184,7 +184,7 @@ existing topic, the text is extracted as a new descendant."
    (list (read-string "Inscribe your material: " nil nil nil t)
          (mir-ask-for-title)
          (mir-ask-for-priority)))
-  (mir-import text priority title))
+  (mir-import text priority title t))
 
 (defun mir-import-file (file)
   "Import FILE by copying it into `mir-archive-directory' and renaming it."
@@ -418,9 +418,11 @@ OLD-PRIORITY as the default value."
       p
     (user-error "%s" "Priority must be a number between 0 and 100.")))
 
-(defun mir-import (text priority title)
+(defun mir-import (text priority title &optional use-default-extension)
   ;; TODO: ability to add tags/keywords
-  (let* ((extension (mir--get-extension-to-current-buffer))
+  (let* ((extension (if use-default-extension
+                        mir-default-file-extension
+                      (mir--get-extension-to-current-buffer)))
          (file-name (mir--format-file-name title nil extension 'parent))
          (file-id (denote-extract-id-from-string file-name)))
     (mir--add-topic-to-db file-id priority title)
