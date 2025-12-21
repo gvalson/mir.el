@@ -163,8 +163,7 @@ existing topic, the text is extracted as a new descendant."
   (if-let* (((region-active-p))
             (text (buffer-substring-no-properties (region-beginning) (region-end))))
       ;; if we're somehow in an existing mir topic, do an extract.
-      ;; TODO: replace this with mir-minor-mode check
-      (if (string= default-directory mir-archive-directory)
+      (if mir-minor-mode
           (mir--add-extract text)
         (mir-import text (mir-ask-for-priority) (mir-ask-for-title)))
     (user-error "%s" "Region not active, skipping")))
@@ -210,15 +209,12 @@ existing topic, the text is extracted as a new descendant."
 
 ;;;###autoload
 (defun mir-read ()
-  ;; TODO: Read the user prefix to refresh the topic
   "Start a reading session or show the current topic. Use `mir-read-next'
 to advance to a new topic."
   (interactive)
-  (if mir--current-topic
-      (mir-show-topic mir--current-topic)
-    (if-let* ((next-topic (mir-queue-next)))
+ (if-let* ((next-topic (mir-queue-next)))
         (mir-show-topic next-topic)
-      (user-error "%s" "Queue is empty for today: nothing to read"))))
+   (user-error "%s" "Queue is empty for today: nothing to read")))
 
 ;;;###autoload
 (defun mir-read-next ()
@@ -440,6 +436,12 @@ OLD-PRIORITY as the default value."
   (sqlite-select (mir--get-db)
                  "SELECT * FROM topics WHERE archived = 0 AND (last_review IS NULL OR julianday('now', 'localtime') - julianday(last_review) >= interval) ORDER BY priority ASC;"))
 
+(define-minor-mode mir-topic-minor-mode
+  "A minor mode for mir topics."
+  :lighter " mir"
+  ;; TODO modeline indicator for priority
+  )
+
 (defun mir-show-topic (topic)
   "Navigates to the file corresponding to TOPIC. Runs
 `mir-show-topic-hook' after opening the buffer. Raises a user-error if
@@ -451,7 +453,8 @@ the file is not found."
             (denote-id-regexp "\\([0-9]\\{8\\}\\)\\(T[0-9]\\{6\\}[0-9]*\\)")
             (file-path (denote-get-path-by-id id)))
       (progn (find-file file-path)
-             (run-hooks 'mir-show-topic-hook))
+             (run-hooks 'mir-show-topic-hook)
+             (mir-topic-minor-mode))
     ;; Optional: ask the user to delete the entry in db
     (user-error "%s%s%s" "Error: File with ID " id " not found!")))
 
