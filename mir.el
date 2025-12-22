@@ -416,7 +416,7 @@ OLD-PRIORITY as the default value."
 
 (defun mir-import (text priority title &optional use-default-extension)
   ;; TODO: ability to add tags/keywords
-  (let* ((extension (if use-default-extension
+  (let* ((extension (if (or use-default-extension (not buffer-file-name))
                         mir-default-file-extension
                       (mir--get-extension-to-current-buffer)))
          (file-name (mir--format-file-name title nil extension 'parent))
