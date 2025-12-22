@@ -19,17 +19,16 @@ Processing in this case means:
 4. Repeating across many days until you feel that the potential of the
    topic is exhausted, at which point you dismiss it.
 
-Incremental reading automatically schedules when you're going to
-review what you've read, thereby increasing your familiarity with the
-text and strengthening the memory of the concepts within. However,
-mir's scope does not extend into asking you questions about the
-material. For that, I recommend pairing mir with a package like
-[[https://github.com/bohonghuang/org-srs][org-srs]] or a standalone spaced repetition program like [[https://apps.ankiweb.net/][Anki]],
-[[https://mnemosyne-proj.org/][Mnemosyne]], and others.
+Mir automatically schedules when you're going to review what you've
+read, thereby increasing your familiarity with the text and
+strengthening the memory of the concepts within. However, mir's scope
+currently does not extend into letting you turn topics into flashcards
+or do cloze deletions. This violates the [[https://supermemo.guru/wiki/Minimum_definition_of_incremental_reading][minimum definition]] of
+incremental reading. Support for these features is in the works.
 
 *Caution:* The process of incremental reading is best used with
 material that evokes curiosity and is inherently interesting. See the
-"Philosophy" section below for more details.
+"Be careful with what you read in mir" section below for more details.
 
 * Installation
 
@@ -63,7 +62,7 @@ file:
   (require 'mir)
 #+END_SRC
 
-* Usage
+* Getting Started
 
 ** Set =mir-archive-directory=
 
@@ -87,14 +86,15 @@ this:
 
 Each of these commands will ask you to type in a priority. Much like
 in [[https://help.supermemo.org/wiki/Glossary:Priority][SuperMemo]], the topic's priority represents its relative importance
-and ranges from 0 to 100 (not including 0 and 100). More important
-items have a lower priority value. Thus, an item with the priority
-value 0 is the most important in the collection and will appear
-earlier.
+and ranges from 0 to 100. More important items have a lower priority
+value. Thus, an item with the priority value 0 is the most important
+in the collection and will appear earlier than others. If this is your
+first day with using mir, stop here. Your imported topics will be
+readable tomorrow.
 
 ** Start reading
 
-Next, run =mir-read= to start reading. You should see a new buffer
+Next day, run =mir-read= to start reading. You should see a new buffer
 show up with one of your imported topics. Feel free to use
 =mir-extract-or-import-from-region= to extract important bits out into
 its own topic. You may also use any other command, as the buffer is
@@ -114,12 +114,13 @@ Generally, you should not worry about topics running out.
 
 ** Dismissing Topics
 
-When a topic has exhausted its value, use =mir-dismiss-current-topic=
-to dismiss it. A dismissed topic will no longer show up when reading,
-but it will still be preserved in =mir-archive-directory= with a
-keyword =archive= being added to it. The dismissed topic will also be
-kept around in the database. Dismissal is preferred over deletion, as
-it prevents accidental loss of important topics.
+When a topic has exhausted its value, use =M-x
+mir-dismiss-current-topic= to dismiss it. A dismissed topic will no
+longer show up when reading, but it will still be preserved in
+=mir-archive-directory= with a keyword =archive= being added to it.
+The dismissed topic will also be kept around in the database.
+Dismissal is preferred over deletion, as it prevents accidental loss
+of important topics.
 
 ** Editing or reprioritizing the current topic
 
@@ -185,16 +186,32 @@ command to inspect the database.
 
 * Philosophy
 
-Mir implements a part of incremental reading as seen in SuperMemo.
+** Why does mir force me to wait before reading?
 
-Using mir eventually results in many repetitions of seeing the same
-material. This can be both benefitial and detrimental and that depends
-on your relationship with the material. If you find the material
-incomprehensible, boring, too heavy or generally unsuitable to your
-present needs, mir will amplify these feelings tenfold by showing the
-material over and over again. Thus, mir is best used with material
-that you find inherently interesting---that you'd study even if no one
-told you to look into it.
+By default, imported topics are not scheduled until the day after they
+are imported. This is because:
+
+1. There may not be much novel information extracted if you already
+   read the topic outside of mir on the same day before importing it.
+2. Waiting before looking at the topic allows for the mind to
+   consolidate the disparate pieces of knowledge needed to understand
+   it. This results in better comprehension and thus more pleasurable
+   reading.
+
+This behavior can be changed through the variable
+=mir-default-topic-interval=. Set it to 0 to add the imported topics
+to the queue immediately.
+
+** Be careful with what you read in mir
+
+Using mir to read some specific material eventually results in you
+seeing it many times. This can be both benefitial and detrimental and
+that depends on your relationship with the material. If you find the
+material incomprehensible, boring, too heavy or generally unsuitable
+to your present needs, mir will amplify these feelings tenfold by
+showing the material over and over again. Thus, mir is best used with
+material that you find inherently interesting---that you'd study even
+if no one told you to look into it.
 
 * Resources for Incremental Reading
 
