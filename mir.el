@@ -163,7 +163,7 @@ existing topic, the text is extracted as a new descendant."
   (if-let* (((region-active-p))
             (text (buffer-substring-no-properties (region-beginning) (region-end))))
       ;; if we're somehow in an existing mir topic, do an extract.
-      (if mir-minor-mode
+      (if mir-topic-minor-mode
           (mir--add-extract text)
         (mir-import text (mir-ask-for-priority) (mir-ask-for-title)))
     (user-error "%s" "Region not active, skipping")))
@@ -330,7 +330,6 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 
 ;; How to make this work for multiple topics?
 (defun mir-topics-change-priority ()
-  ""
   (interactive)
   (let* ((current-topic (tabulated-list-get-entry nil))
          (id (aref current-topic 0))
@@ -624,9 +623,6 @@ way."
      mir-archive-directory
      (denote-get-identifier (current-time))
      tags name extension sequence)))
-
-;; Problem: importing from epubs and naming the file epub works with
-;; emacs but it's not a TRUE epub.
 
 ;; Idea here: have a list of extensions that get renamed into
 ;; `mir-default-file-extension' (default of that would be .txt). All
