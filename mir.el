@@ -114,7 +114,7 @@ formula for calculating the new factor is priority/17.543859 + 1.2. This
 ensures that the A-factor is between 1.2 and 6.9 for priorities ranging
 from 0 to 100 (lower meaning more important topics).")
 
-(defcustom mir-query-function #'mir-get-topics-for-today-by-priority
+(defcustom mir-query-function #'mir-get-topics-up-to-today-by-priority
   "The function that is used to fetch topics for populating `mir-queue'.
 The default option is to fetch all the topics that are due today sorted
 by priority.")
@@ -296,7 +296,8 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
                                       '("Priority" 10 t)
                                       '("A-Factor" 8 t)
                                       '("Interval" 8 t)
-                                      '("Added" 10 t)
+                                      '("Due" 10 t)
+                                      '("Added" 11 t)
                                       '("Last Read" 10 t)
                                       '("Reviews" 7 t)
                                       '("Archived" 8 t)
@@ -317,6 +318,7 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
              (priority (number-to-string (nth 1 topic)))
              (a-factor (number-to-string (nth 2 topic)))
              (interval (number-to-string (nth 3 topic)))
+             (due (nth 10 topic))
              (added (nth 4 topic))
              (last-read (or (nth 5 topic) ""))
              (reviews (number-to-string (nth 6 topic)))
@@ -324,7 +326,7 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
              (archived-date (or (nth 8 topic) "")))
          (list id (vector
                    id title priority a-factor interval
-                   added last-read reviews archived
+                   due added last-read reviews archived
                    archived-date))))
      topics)))
 
@@ -379,11 +381,12 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
         (message "Title now set to '%s'" new-title))
     (user-error "%s" "No active topic.")))
 
-(defun mir-reschedule ()
-  ;; how would this work? I think we might need to add a "scheduled"
-  ;; column for this...
-  ;; already have `mir--update-interval-db'.
-    (interactive))
+(defun mir-reschedule (date)
+  "Reschedule the current topic for a later date."
+  (interactive
+   (list (org-read-date nil)))
+  (let ((id (car mir--current-topic)))
+    (mir--update-due-db id date)))
 
 (defun mir-find-parent ()
   "Display the parent topic of the current topic. This is only relevant for
@@ -423,8 +426,8 @@ OLD-PRIORITY as the default value."
     (mir--add-topic-to-db file-id priority title)
     (write-region text nil file-name)))
 
-(defun mir-get-topics-for-today-by-priority ()
-  "Returns a list of topics due to review today, sorted by priority."
+(defun mir-get-topics-up-to-today-by-priority ()
+  "Returns a list of topics due to review up to today, sorted by priority."
   ;; Question here: should topics that have already been reviewed get
   ;; special treatement?
   ;;
@@ -433,7 +436,7 @@ OLD-PRIORITY as the default value."
   ;; reviewed topics over these? Does it show you all the stuff you've
   ;; already seen before beginning with the unseen stuff?
   (sqlite-select (mir--get-db)
-                 "SELECT * FROM topics WHERE archived = 0 AND (last_review IS NULL OR julianday('now', 'localtime') - julianday(last_review) >= interval) ORDER BY priority ASC;"))
+                 "SELECT *, julianday('now', 'localtime') - julianday(due) AS days_delta FROM topics WHERE days_delta > 0 AND archived = 0 ORDER BY priority ASC;"))
 
 (define-minor-mode mir-topic-minor-mode
   "A minor mode for mir topics."
@@ -518,11 +521,14 @@ redistributing the determined order."
                           "times_read INTEGER NOT NULL, "
                           "archived INT NOT NULL, archived_date TEXT, "
                           ;; should this allow null values?
-                          "title TEXT) STRICT; "))
+                          "title TEXT, " "due TEXT NOT NULL "
+                          ") STRICT;"))
  (sqlite-execute (mir--get-db)
                  "CREATE INDEX IF NOT EXISTS idx_topics_archived ON topics(archived);")
  (sqlite-execute (mir--get-db)
                  "CREATE INDEX IF NOT EXISTS idx_topics_priority_id ON topics(priority, id);")
+ (sqlite-execute (mir--get-db)
+                 "CREATE INDEX IF NOT EXISTS idx_topics_due_id ON topics(due, id);")
  (sqlite-execute (mir--get-db)
                   (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
                           "topic_id TEXT NOT NULL, "
@@ -549,13 +555,17 @@ way."
                    "WHERE ordered.id = topics.id) "
                    "WHERE archived = 0;")))
 
+(sqlite-execute (mir--get-db)
+                "SELECT date(julianday('now', 'localtime') + ?);" [10])
+
 (defun mir--add-topic-to-db (id priority title &optional is-extract)
   (mir--init-db)
   (sqlite-execute (mir--get-db)
-                    "INSERT INTO topics (id, priority, a_factor, interval, added, times_read, archived, title) VALUES(?, ?, ?, ?, date('now', 'localtime'), 0, 0, ?)"
+                    "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES(?, ?, ?, ?, date(julianday('now', 'localtime') + ?), datetime('now', 'localtime'), 0, 0, ?)"
                     `(,id
                       ,priority
                       ,mir-default-a-factor
+                      ,mir-default-topic-interval
                       ,mir-default-topic-interval
                       ,title))
   (mir--rescale-priority-values-db))
@@ -563,17 +573,18 @@ way."
 (defun mir--add-extract-to-db (id priority title)
   (mir--init-db)
   (sqlite-execute (mir--get-db)
-                  "INSERT INTO topics (id, priority, a_factor, interval, added, last_review, times_read, archived, title) VALUES(?, ?, ?, ?, date('now', 'localtime'), date('now', 'localtime'), 1, 0, ?)"
+                  "INSERT INTO topics (id, priority, a_factor, interval, due, added, last_review, times_read, archived, title) VALUES(?, ?, ?, ?, date(julianday('now', 'localtime') + ?), datetime('now', 'localtime'), datetime('now', 'localtime'), 1, 0, ?)"
                   `(,id
                     ,priority
                     ,mir-default-a-factor
+                    ,mir-default-extract-interval
                     ,mir-default-extract-interval
                     ,title))
   (mir--rescale-priority-values-db))
 
 (defun mir--archive-topic-db (id)
   (sqlite-execute (mir--get-db)
-                  "UPDATE topics SET last_review = date('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id))
+                  "UPDATE topics SET last_review = datetime('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id))
   (mir--rescale-priority-values-db))
 
 (defun mir--do-topic-review-db (topic)
@@ -586,9 +597,13 @@ way."
                    old-af))
          (new-interval (* old-interval old-af))
          (new-rt (1+ (nth 6 topic))))
+    ;; one thing to note here: due to using `julianday()', the
+    ;; resulting day may be 1 day later than the interval calculates
+    ;; when `new-interval' is a non-integer (which, in most cases, it
+    ;; should be).
     (sqlite-execute (mir--get-db)
-                    "UPDATE topics SET last_review = date('now', 'localtime'), a_factor=?, interval=?, times_read=? WHERE id=?;"
-                    `(,new-af ,new-interval ,new-rt ,id))
+                    "UPDATE topics SET last_review = datetime('now', 'localtime'), a_factor=?, interval=?, due=date(julianday('now', 'localtime') + ?), times_read=? WHERE id=?;"
+                    `(,new-af ,new-interval ,new-interval ,new-rt ,id))
     (sqlite-execute (mir--get-db)
                     "INSERT INTO topic_reviews (topic_id, review_datetime, priority, a_factor) VALUES (?, datetime('now', 'localtime'), ?, ?)"
                     `(,id ,priority ,old-af))))
@@ -608,6 +623,11 @@ way."
   (sqlite-execute (mir--get-db)
                   "UPDATE topics SET interval=? WHERE id=?"
                   `(,interval ,id)))
+
+(defun mir--update-due-db (id due-date)
+  (sqlite-execute (mir--get-db)
+                  "UPDATE topics SET due=? WHERE id=?"
+                  `(,due-date ,id)))
 
 (defun mir--update-title-db (id new-title)
   (sqlite-execute (mir--get-db)
