@@ -164,7 +164,11 @@ existing topic, the text is extracted as a new descendant."
             (text (buffer-substring-no-properties (region-beginning) (region-end))))
       ;; if we're somehow in an existing mir topic, do an extract.
       (if mir-topic-minor-mode
-          (mir--add-extract text)
+          (progn
+            (mir--add-extract text)
+            (mir--extract-lower-parent-priority
+             (car mir--current-topic)
+             (nth 1 mir--current-topic)))
         (mir-import text (mir-ask-for-priority) (mir-ask-for-title)))
     (user-error "%s" "Region not active, skipping")))
 
@@ -555,8 +559,21 @@ way."
                    "WHERE ordered.id = topics.id) "
                    "WHERE archived = 0;")))
 
-(sqlite-execute (mir--get-db)
-                "SELECT date(julianday('now', 'localtime') + ?);" [10])
+(defun mir--count-active-topics-db ()
+  "Return a count of active (non-archived) topics in the database."
+  (car (car (sqlite-select (mir--get-db)
+                           "SELECT COUNT(*) FROM topics WHERE archived = 0;"))))
+
+(defun mir--extract-lower-parent-priority (id old-priority)
+  "Lower the priority of a parent topic with ID. This is meant to be done
+after extracting something out into its own topic as a means to
+encourage seeing the extracts more than the bigger parent topic. The new
+priority is calculated such that the parent comes 4 topics after it was
+supposed to."
+  (let* ((n-topics (mir--count-active-topics-db))
+         (delta (/ 100.0 n-topics))
+         (new-priority (+ old-priority (* delta 4))))
+    (mir--update-priority-db id new-priority)))
 
 (defun mir--add-topic-to-db (id priority title &optional is-extract)
   (mir--init-db)
