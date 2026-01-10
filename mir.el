@@ -134,16 +134,20 @@ keep track of which topic should be affected by operations")
 ;;;; Commands
 
 ;;;###autoload
-(defun mir-extract-or-import-from-region ()
+(defun mir-extract-or-import-from-region (&optional prefix)
   "Import the selected region as a new topic. If the region is in an
-existing topic, the text is extracted as a new descendant."
-  (interactive)
+existing topic, the text is extracted as a new descendant.
+
+By default, the extract has the same priority as the current topic. In
+order to manually select the priority, call this command with
+\\[universal-argument]."
+  (interactive "P")
   (if-let* (((region-active-p))
             (text (buffer-substring-no-properties (region-beginning) (region-end))))
       ;; if we're somehow in an existing mir topic, do an extract.
       (if mir-topic-minor-mode
           (progn
-            (mir--add-extract text)
+            (mir--add-extract text prefix)
             (mir--extract-lower-parent-priority
              (car mir--current-topic)
              (nth 1 mir--current-topic)))
@@ -647,7 +651,7 @@ supposed to."
 leading period."
   (concat "." (file-name-extension (buffer-file-name))))
 
-(defun mir--add-extract (text)
+(defun mir--add-extract (text prefix)
   (let* ((extension (if mir-inherit-extension-for-extracts
                         (mir--get-extension-to-current-buffer)
                       mir-default-file-extension))
@@ -656,8 +660,11 @@ leading period."
          (parent-keywords (denote-extract-keywords-from-path buffer-file-name))
          (file-name (mir--format-file-name title parent-keywords extension 'child parent-sequence))
          (file-id (denote-extract-id-from-string file-name)))
-    ;; maybe randomly subtract priority vals?
-    (mir--add-extract-to-db file-id (nth 1 mir--current-topic) title)
+    (mir--add-extract-to-db file-id
+                            (if prefix
+                                (mir-ask-for-priority)
+                              (nth 1 mir--current-topic))
+                            title)
     (write-region text nil file-name)))
 
 (defun mir--archive-topic (topic)
