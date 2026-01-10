@@ -26,24 +26,6 @@
 ;; automatically scheduled to be read. This is called incremental
 ;; reading.
 
-;;;; Installation
-
-;;;;; MELPA
-
-;; If you installed from MELPA, you're done.
-
-;;;;; Manual
-
-;; Install these required packages:
-
-;; + denote
-;; + denote-sequence
-
-;; Then put this file in your load-path, and put this in your init
-;; file:
-
-;; (require 'mir)
-
 ;;;; Usage
 
 ;; mir saves all the reading material you import into
@@ -62,10 +44,6 @@
 ;; imported topics are not shown until 1 day passes after importing.
 ;; This is, for now, a deliberate choice which can be overridden by
 ;; configuring `mir-default-topic-interval'.
-
-;;;; Tips
-
-;; + You can customize how the scheduling works.
 
 ;;;; Credits
 
