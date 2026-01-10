@@ -1,7 +1,5 @@
 #+TITLE: mir
 
-# [[https://melpa.org/#/package-name][file:https://melpa.org/packages/package-name-badge.svg]] [[https://stable.melpa.org/#/package-name][file:https://stable.melpa.org/packages/package-name-badge.svg]]
-
 Mir is a package for incremental reading inside Emacs.
 
 * What is Incremental Reading?
@@ -11,31 +9,26 @@ memorizing and dismissing articles, which are further referred to as
 "topics". A "topic" is any piece of text that you want to process.
 Processing in this case means:
 
-1. Importing the text into the system, letting it schedule when the
-   newly created topic will be shown to you.
+1. Importing the text into the system and scheduling when the newly
+   created topic will be shown to you.
 2. Reading the topic whenever it's scheduled.
 3. Making extracts and/or turning some of the text into permanent
    notes, flashcards, etc.
 4. Repeating across many days until you feel that the potential of the
    topic is exhausted, at which point you dismiss it.
 
-Mir automatically schedules when you're going to review what you've
-read, thereby increasing your familiarity with the text and
-strengthening the memory of the concepts within. However, mir's scope
-currently does not extend into letting you turn topics into flashcards
-or do cloze deletions. This violates the [[https://supermemo.guru/wiki/Minimum_definition_of_incremental_reading][minimum definition]] of
-incremental reading. Support for these features is in the works.
+Mir automatically schedules reviews for you, thereby increasing your
+familiarity with the text and strengthening the memory of the concepts
+within. However, mir's scope currently does not extend into letting
+you turn topics into flashcards or do cloze deletions. This violates
+the [[https://supermemo.guru/wiki/Minimum_definition_of_incremental_reading][minimum definition]] of incremental reading. Support for these
+features is in the works.
 
 *Caution:* The process of incremental reading is best used with
 material that evokes curiosity and is inherently interesting. See the
 "Be careful with what you read in mir" section below for more details.
 
 * Installation
-
-** COMMENT MELPA
-
-If you installed from MELPA, you're done. Just run one of the commands
-below.
 
 ** use-package
 
@@ -96,18 +89,21 @@ readable tomorrow.
 
 Next day, run =mir-read= to start reading. You should see a new buffer
 show up with one of your imported topics. Feel free to use
-=mir-extract-or-import-from-region= to extract important bits out into
-its own topic. You may also use any other command, as the buffer is
-just like any other emacs buffer. When you're done reading or simply
-wish to move on, invoke =mir-read-next=. You can continue until the
-queue runs out, after which you can either import more items or do
+=mir-extract-or-import-from-region= to extract an important chunk out
+into its own topic. You may also use any other command, as the buffer
+is just like any other emacs buffer. When you're done reading or
+simply wish to move on, invoke =mir-read-next=. You can continue until
+the queue runs out, after which you can either import more items or do
 something else.
 
-Generally, you should not worry about topics running out.
+Generally, you should not worry about topics running out. As you get
+more familiar with the process and import more articles, you'll have a
+near-endless stream of information. This is why assigning priorities
+are important: you'll see high-priority items first.
 
 * Advanced Usage
 
-** A general overview of the incremental reading process
+** COMMENT A general overview of the incremental reading process
 
 # TODO: write about what it is like to do IR; how it evokes curiosity
 # and wonder, etc...
@@ -117,17 +113,17 @@ Generally, you should not worry about topics running out.
 When a topic has exhausted its value, use =M-x
 mir-dismiss-current-topic= to dismiss it. A dismissed topic will no
 longer show up when reading, but it will still be preserved in
-=mir-archive-directory= with a keyword =archive= being added to it.
-The dismissed topic will also be kept around in the database.
-Dismissal is preferred over deletion, as it prevents accidental loss
-of important topics.
+=mir-archive-directory= with a keyword =archive= being added to its
+file name. The dismissed topic will also be kept around in the
+database. Dismissal is preferred over deletion, as it prevents
+accidental loss of important topics. Note that currently there is no
+way to fully delete topics without manually changing the database.
 
 ** Editing or reprioritizing the current topic
 
-Incremental reading can support a workflow where you first ingest the
-material and then gradually refine it by making small changes across
-the many reviews. To that end, mir provides the following functions
-for changing the topic metadata:
+When using mir, you can gradually refine the imported material by
+making small changes across each review. To that end, mir provides the
+following functions for changing the topic metadata:
 
 - =mir-set-priority=: use this to reprioritize the topic. After
   invoking the command, the topic's actual priority value may be
@@ -137,7 +133,7 @@ for changing the topic metadata:
   fast the intervals between reviews grow. If you want to use this,
   make sure to set =mir-scale-a-factor-by-priority= to =nil=.
 - =mir-set-title=: change the title of the current topic.
-# - =mir-reschedule=
+- =mir-reschedule=: Manually reschedule the topic to a set date.
 
 What might be more important to you, however, is changing the topic's
 content. There's nothing special necessary to accomplish this: mir
@@ -145,6 +141,25 @@ only cares about the file's name in order to make its operations work.
 Mir does not check the file's actual content. You're free to edit the
 file as you wish (including changing its extension), as long as the ID
 at the beginning of the file name is preserved.
+
+** The difference between rescheduling and changing the priority
+
+Rescheduling via =mir-reschedule= or lowering an element's priority
+with =mir-set-priority= may look similar on the surface, but they do
+different things.
+
+First, let's examine what changing the element's priority does. Let's
+say that the priority was lowered from 10 to 50 (higher value means
+lower priority). This means that, on the day when the topic is
+scheduled to be shown, it'll be shown much later than other topics.
+If, for instance, there are 100 topics that have priority values
+10--50, the element will shown right after those 100 topics. Note how,
+when changing the priority, nothing changed about scheduling and time.
+
+On the other hand, using =mir-reschedule= makes it so that the element
+maintains its priority but it'll be delayed in terms of time. Delaying
+a high-priority item is a good way to postpone reviewing it, as the
+high priority makes it almost certain that it'll be looked at.
 
 ** Randomizing Topics
 
@@ -159,9 +174,14 @@ consistently every day. To remedy that, you can configure the variable
 that 20% of the topics in the queue get shuffled) and later adjust to
 your preference.
 
-** Keeping track of extracts with =denote-sequence=
+** Keeping track of extracts and parents
 
-# TODO
+If you find yourself reading an extract and wanting to look at the
+topic where the extract came from, you can use the command
+=mir-find-parent=. It leverages the sequence information encoded in
+the file name to find and open the parent of the current topic. For
+more information, see the manual of =denote-sequence=, which powers
+this functionality.
 
 ** Customizing the reading experience with the show-topic hook
 
@@ -173,15 +193,22 @@ with =web-mode= get displayed with emacs' built-in web browser =eww=:
   (add-hook 'mir-show-topic-hook
             (lambda ()
               (when (eq major-mode #'web-mode)
-                (eww-open-file buffer-file-name))))
+                (progn
+                  (eww-open-file buffer-file-name)
+                  ;; Important: vital mir functions won't work without
+                  ;; this.
+                  (mir-topic-minor-mode)))))
 #+end_src
+
+Be careful if you want to use the snippet above, however, as currently
+extracts from eww buffers are unreliable. This is a known issue.
 
 ** Inspecting the Database
 
 Mir uses SQLite to store scheduling information and review history. By
 default, the database file is located in =mir-archive-directory= and
 named =mir.db=. The name and location is configurable via
-=mir-db-location=. You can use the built-in =sqlite-mode-open-file=
+=mir-db-location=. You can use emacs' built-in =sqlite-mode-open-file=
 command to inspect the database.
 
 * Philosophy
@@ -215,8 +242,23 @@ if no one told you to look into it.
 
 * Resources for Incremental Reading
 
-- # what is incremental reading (youtube)
-- # big il.html
+Note that, presently, all resources about IR assume that you're using
+SuperMemo. This is due to the fact that SuperMemo was the first to
+implement IR in its entirety.
+
+- [[https://www.youtube.com/channel/UCpkWsnAPl-rhGwUOqdi2Vow][Flashcard Guy (YouTube)]]
+- [[https://www.youtube.com/watch?v=oNCLLNZEtz0][What is incremental reading? (youtube)]]
+- [[https://www.youtube.com/watch?v=MYz8ya5pKnc][Starting with Incremental Reading by going through the IR Manual]]
+- [[https://help.supermemo.org/wiki/Incremental_learning][SuperMemo help: Incremental learning]]
+
+* Alternative Software for Incremental Reading
+
+If neither SuperMemo nor mir are your cup of tea, you can get at least
+some features of incremental reading with these tools:
+
+1. [[https://www.remnote.com/][RemNote]] with the [[https://github.com/bjsi/incremental-everything][incremental-everything]] plugin.
+2. https://dendro.cloud/
+3. [[https://apps.ankiweb.net/][Anki]] with this add-on: https://github.com/tvhong/incremental-reading
 
 * Credits
 
@@ -229,7 +271,3 @@ allowing for dynamically generating sequence numbers and easy
 traversal of the hierarchy.
 
 Incremental reading was pioneered by Piotr Wozniak and SuperMemo.
-
-* License
-
-GPLv3
