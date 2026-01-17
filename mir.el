@@ -33,6 +33,7 @@
 ;; folder you like. Afterwards, use any of these commands to import
 ;; the reading material:
 
+;; `mir-import-file': Select and import an existing file.
 ;; `mir-import-buffer': Import the contents of the current buffer.
 ;; `mir-extract-or-import-from-region': Import the selected text from the current buffer.
 ;; `mir-import-from-minibuffer': Type out or yank what you want to import in the minibuffer.
@@ -171,6 +172,7 @@ order to manually select the priority, call this command with
          (mir-ask-for-priority)))
   (mir-import text priority title t))
 
+;;;###autoload
 (defun mir-import-file (file)
   "Import FILE by copying it into `mir-archive-directory' and renaming it."
   (interactive "fImport file: ")
@@ -214,7 +216,6 @@ If no new topic is available, a user error is thrown indicating so."
       (mir--do-topic-review-db mir--current-topic))
     (mir-show-next-topic)))
 
-;;;###autoload
 (defun mir-dismiss-current-topic ()
   "Dismiss the current topic. The dismissed topic will no longer be
 featured in reviews anymore and its corresponding file will have
@@ -414,13 +415,6 @@ OLD-PRIORITY as the default value."
 
 (defun mir-get-topics-up-to-today-by-priority ()
   "Returns a list of topics due to review up to today, sorted by priority."
-  ;; Question here: should topics that have already been reviewed get
-  ;; special treatement?
-  ;;
-  ;; Here, "last_review IS NULL" returns all the topics that have
-  ;; never been reviewed yet. Does SuperMemo prioritize already
-  ;; reviewed topics over these? Does it show you all the stuff you've
-  ;; already seen before beginning with the unseen stuff?
   (sqlite-select (mir--get-db)
                  "SELECT *, julianday('now', 'localtime') - julianday(due) AS days_delta FROM topics WHERE days_delta > 0 AND archived = 0 ORDER BY priority ASC;"))
 
