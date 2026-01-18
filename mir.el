@@ -70,55 +70,66 @@
 
 ;; If this directory doesn't exist, file write commands error out.
 (defcustom mir-archive-directory (expand-file-name "~/Documents/mir/")
-  "The directory where all the imported material will be stored.")
+  "The directory where all the imported material will be stored."
+  :type 'directory)
 
 (defcustom mir-db-location (concat mir-archive-directory "mir.db")
-  "The location for mir's database")
+  "The location for mir's database"
+  :type 'file)
 
 (defcustom mir-default-a-factor 2
-  "The default A-factor for new cards.")
+  "The default A-factor for new cards."
+  :type 'float)
 
 (defcustom mir-default-topic-interval 1
   "How soon the newly imported topics will be shown in days. See also
-`mir-default-extract-interval' which is the same but for extracts.")
+`mir-default-extract-interval' which is the same but for extracts."
+  :type 'natnum)
 
 (defcustom mir-default-extract-interval 2
   "How soon an extracted topic will be shown in days. See also
 `mir-default-topic-interval' which is the same but for newly imported
-topics.")
+topics."
+  :type 'natnum)
 
 (defcustom mir-scale-a-factor-by-priority t
   "Whether the A-factor will be scaled based on the topic's priority. The
 formula for calculating the new factor is priority/17.543859 + 1.2. This
 ensures that the A-factor is between 1.2 and 6.9 for priorities ranging
-from 0 to 100 (lower meaning more important topics).")
+from 0 to 100 (lower meaning more important topics)."
+  :type 'boolean)
 
 (defcustom mir-query-function #'mir-get-topics-up-to-today-by-priority
   "The function that is used to fetch topics for populating `mir-queue'.
 The default option is to fetch all the topics that are due today sorted
-by priority.")
+by priority."
+  :type 'function)
 
 (defcustom mir-randomize-topics-ratio 0
   "The ratio of topics that should be randomized in the queue from 0.0 to
 1.0. 0 means that the queue will fully follow the order given by
 `mir-query-function'. 1.0 means that the ordering will be
 deterministically random. A fixed seed is used here to prevent chaotic
-reordering.")
+reordering."
+  :type 'float)
 
 (defcustom mir-bury-buffer-after-finishing t
   "Whether to bury the current buffer when calling `mir-read-next'.
 When set to a non-nil value, the user will see the currently open buffer
 be dismissed at the end of a reading session (when there's no more
-topics in the queue).")
+topics in the queue)."
+  :type 'boolean)
 
 (defcustom mir-default-file-extension ".txt"
-  "The file extension of newly imported topics.")
+  "The file extension of newly imported topics."
+  :type 'string)
 
 (defcustom mir-inherit-extension-for-extracts nil
   "Whether extracts of a topic should inherit the file extension of the
 current buffer. This can be handy when processing data in a specific
 format but can also cause problems with files that have special
-rendering such as epubs or pdfs.")
+rendering such as epubs or pdfs."
+  :type 'boolean)
 
 (defcustom mir-save-webpage-as 'html
   "How a webpage should be imported into mir. Potential options:
@@ -130,7 +141,10 @@ the browser specifying \"HTML only\".
 images, styling and all else. Requires single-file-cli.
 
 \\='txt: Extract only the readable text on the webpage and save it as a
-plaintext file.")
+plaintext file."
+  :type '(choice (const :tag "HTML File" html)
+                (const :tag "HTML via SingleFile" singlefile)
+                (const :tag "Plain text" txt)))
 
 ;;;; Variables
 
@@ -453,7 +467,7 @@ OLD-PRIORITY as the default value."
 
 (defcustom mir-keymap-prefix "C-c C-."
   "The prefix for `mir-topic-minor-mode' key bindings"
-  :type 'string)
+  :type 'key-sequence)
 
 (defun mir--key (key)
   "Returns a valid keybinding for mir."
@@ -467,7 +481,9 @@ symbols:
 priority: show the item's priority value (rounded to 2 decimal points).
 
 ordinal: show the item's position in the queue. For instance, if the
-item is second in the queue, this will show \"(2)\".")
+item is second in the queue, this will show \"(2)\"."
+  :type '(set (const priority)
+              (const ordinal)))
 
 (define-minor-mode mir-topic-minor-mode
   "A minor mode for mir topics."
@@ -550,7 +566,8 @@ CSS, fonts or other media."
          ".html")))))
 
 (defcustom mir-singlefile-args '()
-  "A list of arguments for single-file-cli for saving web pages to mir.")
+  "A list of arguments for single-file-cli for saving web pages to mir."
+  :type '(repeat string))
 
 (defun mir-import-webpage-singlefile (url)
   "Import webpage located at URL as an HTML file using single-file-cli. Use
