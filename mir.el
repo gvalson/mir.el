@@ -107,9 +107,9 @@ reordering.")
 
 (defcustom mir-bury-buffer-after-finishing t
   "Whether to bury the current buffer when calling `mir-read-next'.
-  When set to a non-nil value, the user will see the currently open
-  buffer be dismissed at the end of a reading session (when there's no
-  more topics in the queue).")
+When set to a non-nil value, the user will see the currently open buffer
+be dismissed at the end of a reading session (when there's no more
+topics in the queue).")
 
 (defcustom mir-default-file-extension ".txt"
   "The file extension of newly imported topics.")
@@ -119,6 +119,18 @@ reordering.")
 current buffer. This can be handy when processing data in a specific
 format but can also cause problems with files that have special
 rendering such as epubs or pdfs.")
+
+(defcustom mir-save-webpage-as 'html
+  "How a webpage should be imported into mir. Potential options:
+
+\\='html: Import as a naked HTML page, similar to saving a web page in
+the browser specifying \"HTML only\".
+
+\\='singlefile: Download the complete webpage as HTML, preserving
+images, styling and all else. Requires single-file-cli.
+
+\\='txt: Extract only the readable text on the webpage and save it as a
+plaintext file.")
 
 ;;;; Variables
 
@@ -152,7 +164,10 @@ order to manually select the priority, call this command with
             (mir--extract-lower-parent-priority
              (car mir--current-topic)
              (nth 1 mir--current-topic)))
-        (mir-import text (mir-ask-for-priority) (mir-ask-for-title)))
+        (mir-import
+         text
+         (mir-ask-for-priority)
+         (mir-ask-for-title)))
     (user-error "%s" "Region not active, skipping")))
 
 ;;;###autoload
@@ -170,7 +185,7 @@ order to manually select the priority, call this command with
    (list (read-string "Inscribe your material: " nil nil nil t)
          (mir-ask-for-title)
          (mir-ask-for-priority)))
-  (mir-import text priority title t))
+  (mir-import text priority title mir-default-file-extension))
 
 ;;;###autoload
 (defun mir-import-file (file)
@@ -194,6 +209,21 @@ order to manually select the priority, call this command with
            (priority (mir-ask-for-priority))
            (id (denote-retrieve-filename-identifier new-new-file-name)))
       (mir--add-topic-to-db id priority title))))
+
+(defun mir-import-url (url)
+  "Import URL into mir as a new topic."
+  (interactive "sURL: ")
+  (unless (org-url-p url)
+    (user-error "Invalid URL, check for typos and try again."))
+  (cond
+   ((eq mir-save-webpage-as 'html)
+    (mir-import-webpage-html url))
+   ((eq mir-save-webpage-as 'singlefile)
+    (mir-import-webpage-singlefile url))
+   ((eq mir-save-webpage-as 'txt)
+    (mir-import-webpage-txt url))
+   (t
+    (user-error "`mir-save-webpage-as' has an invalid value, aborting."))))
 
 ;;;###autoload
 (defun mir-read ()
@@ -403,12 +433,13 @@ OLD-PRIORITY as the default value."
       p
     (user-error "%s" "Priority must be a number between 0 and 100.")))
 
-(defun mir-import (text priority title &optional use-default-extension)
+(defun mir-import (text priority title &optional extension)
   ;; TODO: ability to add tags/keywords
-  (let* ((extension (if (or use-default-extension (not buffer-file-name))
-                        mir-default-file-extension
-                      (mir--get-extension-to-current-buffer)))
-         (file-name (mir--format-file-name title nil extension 'parent))
+  (let* ((file-name (mir--format-file-name
+                     title
+                     nil
+                     (or extension mir-default-file-extension)
+                     'parent))
          (file-id (denote-extract-id-from-string file-name)))
     (mir--add-topic-to-db file-id priority title)
     (write-region text nil file-name)))
@@ -482,32 +513,60 @@ the file is not found."
 result via `mir--randomize-queue'."
     (setq mir-queue (mir--randomize-queue (funcall mir-query-function))))
 
-(defun mir--randomize-queue (queue)
-  "Shuffle QUEUE according to `mir-randomize-topics-ratio'. Uses a fixed
-seed of 'mir' in order to prevent repeated invocations from randomly
-redistributing the determined order."
-  ;; Swap randomly determined elements A and B in the queue.
-  (unless (and (<= mir-randomize-topics-ratio 1.0)
-               (>= mir-randomize-topics-ratio 0.0))
-    (user-error "%s"
-                "`mir-randomize-topics-ratio' set to an invalid value. Make sure it's between 0.0 and 1.0"))
-  (let* ((n-list (seq-length queue))
-         (n-swap (round (* mir-randomize-topics-ratio n-list))))
-    (random "mir")
-    (dotimes (i n-swap)
-      ;; Here we don't care if they end up the same. Based on:
-      ;; https://www.emacswiki.org/emacs/ListModificationLibrary
-      (let ((swap-a (elt queue (random n-list)))
-            (swap-b (elt queue (random n-list))))
-        (setcar (member swap-a queue) swap-b)
-        (setcar (member swap-b queue) swap-a)))
-    queue))
-
 (defun mir-queue-next ()
   "Return the next item in the queue or nil otherwise."
   (mir-update-queue)
   (when mir-queue
       (pop mir-queue)))
+
+(defun mir--webpage-html-callback (status url dir)
+  (if-let* ((dl-error (plist-get status :error)))
+      (user-error "Download failed with error %s" dl-error)
+    (message url)))
+
+;; (mir-import-webpage-html "https://supermemo.guru")
+
+(defun mir-import-webpage-html (url)
+  "Import webpage located at URL as a plain HTML file. May not include any
+CSS, fonts or other media."
+  (let ((dir (temporary-file-directory)))
+    (with-current-buffer (url-retrieve-synchronously url)
+      (when (= (buffer-size) 0)
+        (user-error "Could not retreive URL, check for typos and try again."))
+      (set-buffer-multibyte t)
+      (goto-char (point-min))
+      ;; Headers and response body are separated by an empty line.
+      (re-search-forward "^$")
+      (let* ((html-beg (point))
+             (title-beg (re-search-forward "<title[^>]*>"))
+             (title-end
+              (progn
+                (re-search-forward "</title>")
+                (match-beginning 0))))
+        (mir-import
+         (string-trim (buffer-substring-no-properties html-beg (point-max)))
+         (mir-ask-for-priority)
+         (buffer-substring-no-properties title-beg title-end)
+         ".html")))))
+
+(defcustom mir-singlefile-args '()
+  "A list of arguments for single-file-cli for saving web pages to mir.")
+
+(defun mir-import-webpage-singlefile (url)
+  "Import webpage located at URL as an HTML file using single-file-cli. Use
+`mir-singefile-args' to configure the command line arguments for the
+single-file command."
+  (let ((default-directory (temporary-file-directory)))
+    (shell-command
+     (concat
+      "single-file "
+      (mapconcat 'identity mir-singlefile-args " ")
+      " "
+      url))
+    ;; find the downloaded file and import
+    ))
+
+;; (mir-import-webpage-singlefile "https://test.url")
 
 ;;;;; Private
 
@@ -710,6 +769,27 @@ leading period."
            (sqlite-select (mir--get-db)
                           "SELECT * FROM topics WHERE id = ?"
                           `(,id))))))
+
+(defun mir--randomize-queue (queue)
+  "Shuffle QUEUE according to `mir-randomize-topics-ratio'. Uses a fixed
+seed of 'mir' in order to prevent repeated invocations from randomly
+redistributing the determined order."
+  ;; Swap randomly determined elements A and B in the queue.
+  (unless (and (<= mir-randomize-topics-ratio 1.0)
+               (>= mir-randomize-topics-ratio 0.0))
+    (user-error "%s"
+                "`mir-randomize-topics-ratio' set to an invalid value. Make sure it's between 0.0 and 1.0"))
+  (let* ((n-list (seq-length queue))
+         (n-swap (round (* mir-randomize-topics-ratio n-list))))
+    (random "mir")
+    (dotimes (i n-swap)
+      ;; Here we don't care if they end up the same. Based on:
+      ;; https://www.emacswiki.org/emacs/ListModificationLibrary
+      (let ((swap-a (elt queue (random n-list)))
+            (swap-b (elt queue (random n-list))))
+        (setcar (member swap-a queue) swap-b)
+        (setcar (member swap-b queue) swap-a)))
+    queue))
 
 ;;;; Footer
 
