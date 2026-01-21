@@ -417,7 +417,8 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   (interactive
    (list (org-read-date nil)))
   (let ((id (car mir--current-topic)))
-    (mir--update-due-db id date)))
+    (mir--update-due-db id date)
+    (mir-read)))
 
 (defun mir-find-parent ()
   "Display the parent topic of the current topic. This is only relevant for
