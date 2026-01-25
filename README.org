@@ -4,21 +4,24 @@ Mir is a package for incremental reading inside Emacs.
 
 * What is Incremental Reading?
 
-Incremental reading is a continuous process of importing, refining,
-memorizing and dismissing articles, which are further referred to as
-"topics". A "topic" is any piece of text that you want to process.
-Processing in this case means:
+Incremental reading is an iterative process of importing,
+prioritizing, processing and dismissing text, which is further
+referred to as a "topic". A "topic" is any piece of text that you want
+to read and extract knowledge from. The incremental reading process
+for any given article goes as follows:
 
-1. Importing the text into the system and scheduling when the newly
-   created topic will be shown to you.
-2. Reading the topic whenever it's scheduled.
+1. Importing the article into the system and giving it a /priority/,
+   which is its relative importance compared to other material in your
+   collection.
+2. Reading the article whenever it shows up.
 3. Making extracts and/or turning some of the text into permanent
    notes, flashcards, etc.
 4. Repeating across many days until you feel that the potential of the
-   topic is exhausted, at which point you dismiss it.
+   article is exhausted, at which point you can dismiss it.
 
-Mir automatically schedules reviews for you, thereby increasing your
-familiarity with the text and strengthening the memory of the concepts
+Mir automatically schedules reviews for you, thereby decreasing the
+effort necesary for further reading. This allows you to increase your
+familiarity with the text and strengthen the memory of the concepts
 within. However, mir's scope currently does not extend into letting
 you turn topics into flashcards or do cloze deletions. This violates
 the [[https://supermemo.guru/wiki/Minimum_definition_of_incremental_reading][minimum definition]] of incremental reading. Support for these
@@ -76,6 +79,7 @@ this:
 - =mir-import-from-minibuffer=: Enter your text via the minibuffer and
   import it.
 - =mir-import-file=: Select a file and import it as a topic.
+- =mir-import-url=: Import a web page as an HTML file (*unstable*).
 
 Each of these commands will ask you to type in a priority. Much like
 in [[https://help.supermemo.org/wiki/Glossary:Priority][SuperMemo]], the topic's priority represents its relative importance
@@ -83,23 +87,26 @@ and ranges from 0 to 100. More important items have a lower priority
 value. Thus, an item with the priority value 0 is the most important
 in the collection and will appear earlier than others. If this is your
 first day with using mir, stop here. Your imported topics will be
-readable tomorrow.
+readable tomorrow. If you're wondering why the pause is necessary,
+read the "Philosophy" section below.
 
 ** Start reading
 
 Next day, run =mir-read= to start reading. You should see a new buffer
-show up with one of your imported topics. Feel free to use
+show up with one of your imported topics. Feel free to run
 =mir-extract-or-import-from-region= to extract an important chunk out
-into its own topic. You may also use any other command, as the buffer
-is just like any other emacs buffer. When you're done reading or
-simply wish to move on, invoke =mir-read-next=. You can continue until
-the queue runs out, after which you can either import more items or do
-something else.
+into its own topic and =mir-navigate-to-last-added= to directly jump
+to the newly added file. You may also use any other command, as the
+buffer is just like any other emacs buffer. When you're done reading
+or simply wish to move on, invoke =mir-read-next=. You can continue
+until the queue runs out, after which you can either import more items
+or do something else.
 
 Generally, you should not worry about topics running out. As you get
 more familiar with the process and import more articles, you'll have a
 near-endless stream of information. This is why assigning priorities
-are important: you'll see high-priority items first.
+is important: high-priority items are shown first and will receive
+most of your attention.
 
 * Advanced Usage
 
@@ -110,14 +117,14 @@ are important: you'll see high-priority items first.
 
 ** Dismissing Topics
 
-When a topic has exhausted its value, use =M-x
-mir-dismiss-current-topic= to dismiss it. A dismissed topic will no
-longer show up when reading, but it will still be preserved in
-=mir-archive-directory= with a keyword =archive= being added to its
-file name. The dismissed topic will also be kept around in the
-database. Dismissal is preferred over deletion, as it prevents
-accidental loss of important topics. Note that currently there is no
-way to fully delete topics without manually changing the database.
+When a topic has exhausted its value, use =mir-dismiss-current-topic=
+to dismiss it. A dismissed topic will no longer show up when reading,
+but it will still be preserved in =mir-archive-directory= with a
+keyword =archive= being added to its file name. The dismissed topic
+will also be kept around in the database. Dismissal is preferred over
+deletion, as it prevents accidental loss of important topics. Note
+that currently there is no way to fully delete topics without manually
+changing the database.
 
 ** Editing or reprioritizing the current topic
 
@@ -141,6 +148,14 @@ only cares about the file's name in order to make its operations work.
 Mir does not check the file's actual content. You're free to edit the
 file as you wish (including changing its extension), as long as the ID
 at the beginning of the file name is preserved.
+
+Keep in mind that the commands above work on the topic that is
+considered as "current" by mir. As of right now, if you navigate to a
+different file and invoke the commands, the changes will NOT be made
+on the file that you're currently viewing. You can always use =C-h v=
+to check the value of =mir--current-topic= to make sure that the
+commands you're calling will operate on the file that you wish them
+to.
 
 ** The difference between rescheduling and changing the priority
 
@@ -174,6 +189,20 @@ consistently every day. To remedy that, you can configure the variable
 that 20% of the topics in the queue get shuffled) and later adjust to
 your preference.
 
+** Writing Your Own Queue Function
+
+If you desire to change how topics are queued for the day, you can
+set the value of =mir-query-function= to any function that takes zero
+parameters and queries the mir database. Here's some example code:
+
+#+begin_src emacs-lisp
+  (setq mir-query-function
+        (lambda ()
+          (sqlite-select (mir--get-db)
+          ;; Make sure to select all the fields from the database.
+                         "SELECT * FROM topics WHERE archived = 0 AND priority > 50;")))
+#+end_src
+
 ** Keeping track of extracts and parents
 
 If you find yourself reading an extract and wanting to look at the
@@ -193,15 +222,17 @@ with =web-mode= get displayed with emacs' built-in web browser =eww=:
   (add-hook 'mir-show-topic-hook
             (lambda ()
               (when (eq major-mode #'web-mode)
-                (progn
-                  (eww-open-file buffer-file-name)
+                (let ((current-file (buffer-file-name)))
+                  (eww-open-file current-file)
                   ;; Important: vital mir functions won't work without
                   ;; this.
-                  (mir-topic-minor-mode)))))
+                  (mir-topic-minor-mode)
+                  ;; Important: make sure that the eww buffer has a
+                  ;; valid `buffer-file-name' value. This is important
+                  ;; for making extracts from the buffer.
+                  (unless buffer-file-name
+                    (setq-local buffer-file-name current-file))))))
 #+end_src
-
-Be careful if you want to use the snippet above, however, as currently
-extracts from eww buffers are unreliable. This is a known issue.
 
 ** Inspecting the Database
 
@@ -250,6 +281,9 @@ implement IR in its entirety.
 - [[https://www.youtube.com/watch?v=oNCLLNZEtz0][What is incremental reading? (youtube)]]
 - [[https://www.youtube.com/watch?v=MYz8ya5pKnc][Starting with Incremental Reading by going through the IR Manual]]
 - [[https://help.supermemo.org/wiki/Incremental_learning][SuperMemo help: Incremental learning]]
+
+I've also started writing about incremental reading on my website:
+[[https://gvalia.xyz/en/wiki/ir/][Incremental Reading]].
 
 * Alternative Software for Incremental Reading
 

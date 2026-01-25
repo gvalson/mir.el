@@ -158,6 +158,10 @@ keep track of which topic should be affected by operations")
 (defvar mir-show-topic-hook '()
   "Hooks for `mir-show-topic'; runs after a topic is displayed.")
 
+(defvar mir--last-added-files (make-ring 15)
+  "A ring of the 15 last added files. Use `mir-navigate-to-last-added' to
+jump to the last added file.")
+
 ;;;; Commands
 
 ;;;###autoload
@@ -428,6 +432,14 @@ we call the parent)."
   (let ((denote-directory mir-archive-directory))
     (denote-sequence-find 'parent)))
 
+(defun mir-navigate-to-last-added ()
+  "Navigate to the last added (imported or extracted) file."
+  ;; with prefix argument open a window listing all the last added files?
+  (interactive)
+  (if (ring-empty-p mir--last-added-files)
+      (message "The last added history is empty.")
+    (find-file (ring-ref mir--last-added-files 0))))
+
 ;;;; Functions
 
 ;;;;; Public
@@ -457,7 +469,8 @@ OLD-PRIORITY as the default value."
                      'parent))
          (file-id (denote-extract-id-from-string file-name)))
     (mir--add-topic-to-db file-id priority title)
-    (write-region text nil file-name)))
+    (write-region text nil file-name)
+    (ring-insert mir--last-added-files file-name)))
 
 (defun mir-get-topics-up-to-today-by-priority ()
   "Returns a list of topics due to review up to today, sorted by priority."
@@ -760,7 +773,8 @@ leading period."
                                 (mir-ask-for-priority)
                               (nth 1 mir--current-topic))
                             title)
-    (write-region text nil file-name)))
+    (write-region text nil file-name)
+    (ring-insert mir--last-added-files file-name)))
 
 (defun mir--archive-topic (topic)
   (let* ((id (car topic))
