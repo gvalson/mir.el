@@ -292,7 +292,8 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 
 (define-derived-mode mir-queue-list-mode tabulated-list-mode "Mir Queue"
   "Major mode for a tabular listing of mir topics currently in the queue."
-  (setq tabulated-list-format (vector '("ID" 18 t)
+  (setq tabulated-list-format (vector '("#" 3 t)
+                                      '("ID" 18 t)
                                       '("Title" 35 t)
                                       '("Priority" 10 t)
                                       '("A-Factor" 8 t)
@@ -305,15 +306,18 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 (defun mir--format-queue-for-tabular-list ()
   "Format `mir-queue' to be displayed in `mir-queue-list-mode'."
   (mir-update-queue)
+  (setq mir--queue-n 0)
   (mapcar
      (lambda (topic)
+       (setq mir--queue-n (1+ mir--queue-n))
        (let ((id (car topic))
              (title (or (nth 9 topic) "Untitled"))
              (priority (number-to-string (nth 1 topic)))
              (a-factor (number-to-string (nth 2 topic)))
              (interval (number-to-string (nth 3 topic)))
              (due (nth 10 topic)))
-         (list id (vector id title priority a-factor interval due))))
+         (list id (vector (number-to-string mir--queue-n)
+                          id title priority a-factor interval due))))
      mir-queue))
 
 (defun mir-show-queue ()
