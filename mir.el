@@ -296,7 +296,8 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
                                       '("Title" 35 t)
                                       '("Priority" 10 t)
                                       '("A-Factor" 8 t)
-                                      '("Interval" 8 t))
+                                      '("Interval" 8 t)
+                                      '("Due" 10 t))
         tabulated-list-revert-hook #'mir--format-queue-for-tabular-list
         tabulated-list-entries #'mir--format-queue-for-tabular-list)
   (tabulated-list-init-header))
@@ -310,8 +311,9 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
              (title (or (nth 9 topic) "Untitled"))
              (priority (number-to-string (nth 1 topic)))
              (a-factor (number-to-string (nth 2 topic)))
-             (interval (number-to-string (nth 3 topic))))
-         (list id (vector id title priority a-factor interval))))
+             (interval (number-to-string (nth 3 topic)))
+             (due (nth 10 topic)))
+         (list id (vector id title priority a-factor interval due))))
      mir-queue))
 
 (defun mir-show-queue ()
