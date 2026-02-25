@@ -327,6 +327,16 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   (mir-queue-list-mode)
   (revert-buffer nil t t))
 
+(defun mir-queue-force-topic-repetition ()
+  (interactive)
+  "Force the repetition of the topic selected in `mir-queue'. Meant to be
+used with `mir-queue-list-mode'."
+  (let* ((current-topic (tabulated-list-get-entry nil))
+         (id (aref current-topic 1)))
+    (mir-show-topic (car (mir--select-topic-db id)))))
+
+(keymap-set mir-queue-list-mode-map "<return>" #'mir-queue-force-topic-repetition)
+
 ;; -----
 ;; Start all topics mode
 
@@ -375,10 +385,14 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
 (defun mir-topics-change-priority ()
   (interactive)
   (let* ((current-topic (tabulated-list-get-entry nil))
-         (id (aref current-topic 0))
+         (id (aref current-topic 1))
          (new-priority (mir-ask-for-priority)))
     (mir--update-priority-db id new-priority)
     (message "Set new priority to %f" new-priority)))
+
+;; keybindings
+
+(keymap-set mir-topics-list-mode-map "p" #'mir-topics-change-priority)
 
 (defun mir-show-all-topics ()
   "Show all the topics in the database"
@@ -655,6 +669,12 @@ way."
                    "WHERE ordered.id = topics.id) "
                    "WHERE archived = 0;")))
 
+
+(defun mir--select-topic-db (id)
+  (sqlite-select (mir--get-db)
+                 "SELECT * FROM topics WHERE id = ?"
+                 `(,id)))
+
 (defun mir--count-active-topics-db ()
   "Return a count of active (non-archived) topics in the database."
   (car (car (sqlite-select (mir--get-db)
@@ -804,9 +824,7 @@ leading period."
   (when-let* ((id (car mir--current-topic)))
     (setq mir--current-topic
           (car
-           (sqlite-select (mir--get-db)
-                          "SELECT * FROM topics WHERE id = ?"
-                          `(,id))))))
+           (mir--select-topic-db id)))))
 
 (defun mir--randomize-queue (queue)
   "Shuffle QUEUE according to `mir-randomize-topics-ratio'. Uses a fixed
