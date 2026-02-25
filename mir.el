@@ -507,12 +507,12 @@ OLD-PRIORITY as the default value."
   "Returns a valid keybinding for mir."
   (kbd (concat mir-keymap-prefix " " key)))
 
-(defcustom mir-modeline-items '(priority ordinal)
-  "What items to include in the modeline shown with `mir-topic-minor-mode'.
-This variable is a list which may be populated with the following
+(defcustom mir-status-bar-items '(priority ordinal)
+  "What items to include in mir's status bar that's shown when viewing a
+topic. This variable is a list which may be populated with the following
 symbols:
 
-priority: show the item's priority value (rounded to 2 decimal points).
+priority: show the item's priority value.
 
 ordinal: show the item's position in the queue. For instance, if the
 item is second in the queue, this will show \"(2)\"."
@@ -522,10 +522,21 @@ item is second in the queue, this will show \"(2)\"."
 (define-minor-mode mir-topic-minor-mode
   "A minor mode for mir topics."
   :lighter " mir"
-  ;; TODO modeline indicator for priority
-  ;; Can use minor-mode-alist for this ^
   ;; :keymap (list (cons (mir--key "e") #'example))
   )
+
+(defun mir-display-status-bar ()
+  (interactive)
+  ;; TODO: 'ordinal is a problem. I'm not sure how to do this.
+  (with-current-buffer-window "*mir-status-bar*"
+      #'display-buffer-use-some-window
+      nil
+      (toggle-window-dedicated)
+      (when (member 'priority mir-status-bar-items)
+        (let* ((priority (nth 1 mir--current-topic))
+               (formatted-priority (format "%f" priority)))
+          (insert "P: " (propertize formatted-priority
+                                    'face 'bold))))))
 
 ;; --- end mir-minor-mode things
 
