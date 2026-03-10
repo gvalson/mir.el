@@ -210,6 +210,8 @@ order to manually select the priority, call this command with
   "Import FILE by copying it into `mir-archive-directory' and renaming it."
   (interactive "fImport file: ")
   (let* ((extension (concat "." (file-name-extension file)))
+         ;; FIXME bug: errors out if importing from
+         ;; `mir-archive-directory'
          (new-file-name
           (concat
            mir-archive-directory
@@ -328,14 +330,24 @@ the 'archive' tag applied to it. Does nothing if invoked outside of
   (revert-buffer nil t t))
 
 (defun mir-queue-force-topic-repetition ()
-  (interactive)
   "Force the repetition of the topic selected in `mir-queue'. Meant to be
 used with `mir-queue-list-mode'."
+  (interactive)
   (let* ((current-topic (tabulated-list-get-entry nil))
          (id (aref current-topic 1)))
     (mir-show-topic (car (mir--select-topic-db id)))))
 
+(defun mir-queue-adjust-priority ()
+  "Adjust the priority of the currently selected element in the queue."
+  (interactive)
+  (let* ((current-topic (tabulated-list-get-entry nil))
+         (id (aref current-topic 1))
+         (new-priority (mir-ask-for-priority)))
+    (mir--update-priority-db id new-priority)
+    (revert-buffer nil t t)))
+
 (keymap-set mir-queue-list-mode-map "<return>" #'mir-queue-force-topic-repetition)
+(keymap-set mir-queue-list-mode-map "p" #'mir-queue-adjust-priority)
 
 ;; -----
 ;; Start all topics mode
