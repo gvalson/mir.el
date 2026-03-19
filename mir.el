@@ -162,6 +162,12 @@ keep track of which topic should be affected by operations")
   "A ring of the 15 last added files. Use `mir-navigate-to-last-added' to
 jump to the last added file.")
 
+(defvar mir--denote-id-regexp
+  "\\([0-9]\\{8\\}\\)\\(T[0-9]\\{6\\}[0-9]*\\)"
+  "A regular expression for defining denote IDs. Mostly equivalent to the
+default regular expression with the addition of 3 more numbers at the
+end for encoding milliseconds.")
+
 ;;;; Commands
 
 ;;;###autoload
@@ -397,14 +403,32 @@ used with `mir-queue-list-mode'."
 (defun mir-topics-change-priority ()
   (interactive)
   (let* ((current-topic (tabulated-list-get-entry nil))
-         (id (aref current-topic 1))
+         (id (aref current-topic 0))
          (new-priority (mir-ask-for-priority)))
     (mir--update-priority-db id new-priority)
     (message "Set new priority to %f" new-priority)))
 
+(defun mir-topics-navigate-to-topic ()
+  "Navigate to the currently selected topic."
+  (interactive)
+  (let* ((current-topic (tabulated-list-get-entry nil))
+         (id (aref current-topic 0))
+         (archived (aref current-topic 9))
+         (denote-id-regexp mir--denote-id-regexp)
+         (denote-directory mir-archive-directory)
+         (path
+          (if (string= archived "1")
+            ;; TODO it'd be better to just fix the archived topic IDs.
+            (user-error "Cannot navigate to archived files!")
+            (denote-get-path-by-id id))))
+    (if path
+        (find-file path)
+      (user-error "Element with ID %s not found!" id))))
+
 ;; keybindings
 
 (keymap-set mir-topics-list-mode-map "p" #'mir-topics-change-priority)
+(keymap-set mir-topics-list-mode-map "<return>" #'mir-topics-navigate-to-topic)
 
 (defun mir-show-all-topics ()
   "Show all the topics in the database"
@@ -559,8 +583,7 @@ the file is not found."
   (setq mir--current-topic topic)
   (if-let* ((denote-directory mir-archive-directory)
             (id (car topic))
-            ;; FIXME: hacky, this should not be defined here.
-            (denote-id-regexp "\\([0-9]\\{8\\}\\)\\(T[0-9]\\{6\\}[0-9]*\\)")
+            (denote-id-regexp mir--denote-id-regexp)
             (file-path (denote-get-path-by-id id)))
       (progn (find-file file-path)
              (run-hooks 'mir-show-topic-hook)
@@ -797,7 +820,7 @@ supposed to."
          (denote-use-signature sequence))
     (denote-format-file-name
      mir-archive-directory
-     (denote-get-identifier (current-time))
+     (funcall denote-get-identifier-function nil (current-time))
      tags name extension sequence)))
 
 ;; Idea here: have a list of extensions that get renamed into
@@ -830,7 +853,7 @@ leading period."
          (denote-directory mir-archive-directory)
          (denote-save-buffers t)
          (denote-kill-buffers t)
-         (denote-id-regexp "\\([0-9]\\{8\\}\\)\\(T[0-9]\\{6\\}[0-9]*\\)")
+         (denote-id-regexp mir--denote-id-regexp)
          (topic-file-path (denote-get-path-by-id id))
          (old-keywords (denote-extract-keywords-from-path topic-file-path))
          (new-keywords (add-to-list 'old-keywords "archive")))
