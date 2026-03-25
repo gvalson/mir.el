@@ -231,7 +231,7 @@ order to manually select the priority, call this command with
     (copy-file file new-file-name)
     (let* ((new-new-file-name
             (denote-rename-file new-file-name 'keep-current tags
-                                sequence (current-time)))
+                                sequence (current-time) nil))
            (priority (mir-ask-for-priority))
            (id (denote-retrieve-filename-identifier new-new-file-name)))
       (mir--add-topic-to-db id priority title))))
@@ -559,20 +559,39 @@ item is second in the queue, this will show \"(2)\"."
   "A minor mode for mir topics."
   :lighter " mir"
   ;; :keymap (list (cons (mir--key "e") #'example))
-  )
+  (if mir-topic-minor-mode
+      (mir-display-status-bar)
+    (setq header-line-format nil)))
+
+(defface mir-highest-priority
+  ;; :weight bold
+  ;; foreground red
+  ;; optionally: background
+  '((t :inherit error))
+  "The face used for displaying the highest priority values.")
+
+(defface mir-high-priority
+  ;; :weight bold
+  ;; foreground red
+  ;; optionally: background
+  '((t :inherit warning))
+  "The face used for displaying high, but not highest priority values.")
+
+;; also more for medium-high priority (yellow), medium (green), low (cyan), and very low (blue / purple)
+;; need a way to adjust the values of the thresholds for transitioning between these
 
 (defun mir-display-status-bar ()
   (interactive)
-  ;; TODO: 'ordinal is a problem. I'm not sure how to do this.
-  (with-current-buffer-window "*mir-status-bar*"
-      #'display-buffer-use-some-window
-      nil
-      (toggle-window-dedicated)
-      (when (member 'priority mir-status-bar-items)
-        (let* ((priority (nth 1 mir--current-topic))
-               (formatted-priority (format "%f" priority)))
-          (insert "P: " (propertize formatted-priority
-                                    'face 'bold))))))
+  ;; TODO Consider removing `ordinal'.
+  (when (member 'priority mir-status-bar-items)
+    (let* ((priority (nth 1 mir--current-topic))
+           (formatted-priority (format "%f" priority))
+           (is-highest (< priority 5.0)))
+      (setq header-line-format
+            (list "Priority: "
+                  `(:propertize ,formatted-priority 'face mir-high-priority))))))
+
+(insert (propertize "0.134" 'face 'bold))
 
 ;; --- end mir-minor-mode things
 
@@ -861,6 +880,7 @@ leading period."
     (denote-rename-file topic-file-path
                         'keep-current
                         new-keywords
+                        'keep-current
                         'keep-current
                         'keep-current)
     (mir--archive-topic-db id)))
