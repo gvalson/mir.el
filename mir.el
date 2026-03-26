@@ -583,6 +583,7 @@ item is second in the queue, this will show \"(2)\"."
 (defun mir-display-status-bar ()
   (interactive)
   ;; TODO Consider removing `ordinal'.
+  ;; TODO: Update this after the user runs `mir-set-priority'
   (when (member 'priority mir-status-bar-items)
     (let* ((priority (nth 1 mir--current-topic))
            (formatted-priority (format "%f" priority))
