@@ -816,6 +816,7 @@ supposed to."
 (defun mir--format-file-name (name tags extension seq-type &optional parent-sequence)
   "Wrapper around `denote-format-file-name' for now."
   (let* ((denote-directory mir-archive-directory)
+         (denote-id-regexp mir--denote-id-regexp)
          (sequence (denote-sequence-get-new seq-type parent-sequence))
          (denote-use-signature sequence))
     (denote-format-file-name
