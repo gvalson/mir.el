@@ -592,8 +592,6 @@ item is second in the queue, this will show \"(2)\"."
             (list "Priority: "
                   `(:propertize ,formatted-priority 'face mir-high-priority))))))
 
-(insert (propertize "0.134" 'face 'bold))
-
 ;; --- end mir-minor-mode things
 
 (defun mir-show-topic (topic)
