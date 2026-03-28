@@ -485,7 +485,8 @@ used with `mir-queue-list-mode'."
 topics that were made via being extracted from some other topic (which
 we call the parent)."
   (interactive)
-  (let ((denote-directory mir-archive-directory))
+  (let ((denote-directory mir-archive-directory)
+        (denote-id-regexp mir--denote-id-regexp))
     (denote-sequence-find 'parent)))
 
 (defun mir-navigate-to-last-added ()
