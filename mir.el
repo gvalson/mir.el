@@ -112,6 +112,13 @@ no change unless they opt in."
   :type '(choice (const priority-scaled) (const adaptive) (const static))
   :group 'mir)
 
+(defcustom mir-a-factor-function #'mir--a-factor-priority-scaled
+  "Function that computes a topic's new A-factor.
+Called as (FN TOPIC-ID OLD-A-FACTOR PRIORITY EVENT) where EVENT is one of
+`init', `review', `extract', `postpone', `advance'."
+  :type 'function
+  :group 'mir)
+
 (defcustom mir-query-function #'mir-get-topics-up-to-today-by-priority
   "The function that is used to fetch topics for populating `mir-queue'.
 The default option is to fetch all the topics that are due today sorted
@@ -797,6 +804,14 @@ supposed to."
   (sqlite-execute (mir--get-db)
                   "UPDATE topics SET last_review = datetime('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id))
   (mir--rescale-priority-values-db))
+
+(defun mir--a-factor-priority-scaled (_topic-id old-af priority _event)
+  "Legacy A-factor calculation. Ignores TOPIC-ID and EVENT.
+Returns OLD-AF unchanged unless `mir-scale-a-factor-by-priority' is non-nil,
+in which case returns `1.2 + priority/17.543859'."
+  (if mir-scale-a-factor-by-priority
+      (+ 1.2 (/ priority 17.543859))
+    old-af))
 
 (defun mir--do-topic-review-db (topic)
   (let* ((id (car topic))
