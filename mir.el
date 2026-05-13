@@ -918,4 +918,4 @@ redistributing the determined order."
 
 (provide 'mir)
 
-;;; package-name.el ends here
+;;; mir.el ends here
