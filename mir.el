@@ -99,6 +99,19 @@ ensures that the A-factor is between 1.2 and 6.9 for priorities ranging
 from 0 to 100 (lower meaning more important topics)."
   :type 'boolean)
 
+(defcustom mir-a-factor-mode 'priority-scaled
+  "How A-factor is computed for topics.
+- `priority-scaled' (default): legacy behaviour — derive A-factor from
+  priority each review, scaled by `mir-scale-a-factor-by-priority'.
+- `adaptive': initial A-factor from content length (when available);
+  bumped multiplicatively on extract, postpone, and advance events.
+- `static': use `mir-default-a-factor' verbatim; no scaling.
+
+Default value matches pre-existing behaviour so upgrading users see
+no change unless they opt in."
+  :type '(choice (const priority-scaled) (const adaptive) (const static))
+  :group 'mir)
+
 (defcustom mir-query-function #'mir-get-topics-up-to-today-by-priority
   "The function that is used to fetch topics for populating `mir-queue'.
 The default option is to fetch all the topics that are due today sorted

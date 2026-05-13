@@ -12,5 +12,10 @@
   (should (numberp mir-default-a-factor))
   (should (> mir-default-a-factor 0)))
 
+(ert-deftest mir-a-factor-mode-defcustom-exists ()
+  "`mir-a-factor-mode' is defined and defaults to `priority-scaled'."
+  (should (boundp 'mir-a-factor-mode))
+  (should (eq mir-a-factor-mode 'priority-scaled)))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here
