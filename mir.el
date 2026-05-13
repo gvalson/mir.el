@@ -818,9 +818,7 @@ in which case returns `1.2 + priority/17.543859'."
          (priority (nth 1 topic))
          (old-af (nth 2 topic))
          (old-interval (nth 3 topic))
-         (new-af (if mir-scale-a-factor-by-priority
-                     (+ 1.2 (/ priority 17.543859))
-                   old-af))
+         (new-af (funcall mir-a-factor-function id old-af priority 'review))
          (new-interval (* old-interval old-af))
          (new-rt (1+ (nth 6 topic))))
     ;; one thing to note here: due to using `julianday()', the

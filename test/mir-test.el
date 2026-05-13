@@ -31,5 +31,25 @@
     (should (= (mir--a-factor-priority-scaled 'ignored 1.7 50 'review)
                1.7))))
 
+(ert-deftest mir-do-topic-review-db-uses-a-factor-function ()
+  "`mir--do-topic-review-db' routes through `mir-a-factor-function'."
+  (let* ((calls nil)
+         (mir-a-factor-function
+          (lambda (id old-af priority event)
+            (push (list id old-af priority event) calls)
+            3.14)))
+    ;; Use a sandbox DB so we don't touch user data.
+    (let* ((tmp (make-temp-file "mir-test-db-"))
+           (mir-db-location tmp))
+      (unwind-protect
+          (progn
+            (mir--init-db)
+            (sqlite-execute (mir--get-db)
+                            "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('TID', 50.0, 2.0, 1, date('now'), datetime('now'), 0, 0, 't');")
+            (let ((topic (car (mir--select-topic-db "TID"))))
+              (mir--do-topic-review-db topic))
+            (should (equal calls '(("TID" 2.0 50.0 review)))))
+        (delete-file tmp)))))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here
