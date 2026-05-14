@@ -119,6 +119,34 @@ Called as (FN TOPIC-ID OLD-A-FACTOR PRIORITY EVENT) where EVENT is one of
   :type 'function
   :group 'mir)
 
+(defconst mir-a-factor-min 1.05
+  "Hard lower bound on A-factor in adaptive mode.")
+
+(defconst mir-a-factor-max 5.0
+  "Hard upper bound on A-factor in adaptive mode.")
+
+(defconst mir-a-factor-bump-extract 1.05
+  "Multiplicative bump applied to the parent topic on each extract.")
+
+(defconst mir-a-factor-bump-postpone 1.10
+  "Multiplicative bump applied on postpone or reschedule-later.")
+
+(defconst mir-a-factor-bump-advance 0.90
+  "Multiplicative bump applied on advance (reschedule-earlier).")
+
+(defun mir--clamp-a-factor (value)
+  "Clamp VALUE to [`mir-a-factor-min', `mir-a-factor-max']."
+  (max mir-a-factor-min (min mir-a-factor-max value)))
+
+(defun mir--initial-a-factor (units)
+  "Compute the initial A-factor for content of UNITS length.
+UNITS is page count for PDF, chapter count for EPUB, or minutes for video.
+Returns `mir-default-a-factor' when UNITS is nil or non-positive."
+  (if (or (null units) (<= units 0))
+      mir-default-a-factor
+    (mir--clamp-a-factor
+     (- 2.5 (* 0.25 (log (/ units 10.0) 2))))))
+
 (defcustom mir-query-function #'mir-get-topics-up-to-today-by-priority
   "The function that is used to fetch topics for populating `mir-queue'.
 The default option is to fetch all the topics that are due today sorted

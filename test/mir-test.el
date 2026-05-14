@@ -51,5 +51,26 @@
             (should (equal calls '(("TID" 2.0 50.0 review)))))
         (delete-file tmp)))))
 
+(defconst mir-test--af-tol 0.01)
+
+(ert-deftest mir-initial-a-factor-boundaries ()
+  "Initial A-factor curve produces expected values at known points."
+  ;; Sample table from design spec section 3.2:
+  ;;   10 units  → 2.50
+  ;;   50 units  → 1.92
+  ;;   100 units → 1.67
+  ;;   345 units → 1.22
+  ;;   500 units → ~1.10 (clamped near min)
+  (should (< (abs (- (mir--initial-a-factor 10)  2.50)) mir-test--af-tol))
+  (should (< (abs (- (mir--initial-a-factor 50)  1.92)) mir-test--af-tol))
+  (should (< (abs (- (mir--initial-a-factor 100) 1.67)) mir-test--af-tol))
+  (should (< (abs (- (mir--initial-a-factor 345) 1.22)) mir-test--af-tol)))
+
+(ert-deftest mir-initial-a-factor-clamps ()
+  (should (>= (mir--initial-a-factor 100000) mir-a-factor-min))
+  (should (<= (mir--initial-a-factor 100000) mir-a-factor-max))
+  (should (= (mir--initial-a-factor 0) mir-default-a-factor))
+  (should (= (mir--initial-a-factor nil) mir-default-a-factor)))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here
