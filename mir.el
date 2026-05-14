@@ -522,11 +522,37 @@ used with `mir-queue-list-mode'."
     (user-error "%s" "No active topic.")))
 
 (defun mir-reschedule (date)
-  "Reschedule the current topic for a later date."
+  "Reschedule the current topic to DATE.
+In adaptive mode, bumps the A-factor up when DATE is later than the
+current due date, and down when DATE is earlier."
   (interactive
    (list (org-read-date nil)))
-  (let ((id (car mir--current-topic)))
+  (let* ((id (car mir--current-topic))
+         (old-due (nth 10 mir--current-topic)))
     (mir--update-due-db id date)
+    (when (eq mir-a-factor-mode 'adaptive)
+      (let ((factor (cond
+                     ((null old-due) mir-a-factor-bump-postpone)
+                     ((string> date old-due) mir-a-factor-bump-postpone)
+                     ((string< date old-due) mir-a-factor-bump-advance)
+                     (t 1.0))))
+        (unless (= factor 1.0)
+          (mir--bump-a-factor id factor))))
+    (mir-read)))
+
+;;;###autoload
+(defun mir-postpone (days)
+  "Postpone the current topic by DAYS days.
+In adaptive mode this also bumps the A-factor up by
+`mir-a-factor-bump-postpone'."
+  (interactive "nDays to postpone: ")
+  (let* ((id (car mir--current-topic))
+         (new-due (format-time-string
+                   "%Y-%m-%d"
+                   (time-add (current-time) (days-to-time days)))))
+    (mir--update-due-db id new-due)
+    (when (eq mir-a-factor-mode 'adaptive)
+      (mir--bump-a-factor id mir-a-factor-bump-postpone))
     (mir-read)))
 
 (defun mir-find-parent ()

@@ -259,5 +259,61 @@
             (should (= af 2.0))))
       (delete-file tmp))))
 
+(defun mir-test--current-topic-with-due (id priority due)
+  "Helper: build a mock `mir--current-topic' tuple matching DB shape."
+  (list id priority 2.0 1.0 nil nil 0 0 nil "t" due nil))
+
+(ert-deftest mir-reschedule-postpone-bumps-adaptive ()
+  "Rescheduling to a later date than `due' bumps A-factor up."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp)
+         (mir-a-factor-mode 'adaptive)
+         (mir--current-topic (mir-test--current-topic-with-due "T1" 50.0 "2026-05-13")))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('T1', 50.0, 2.0, 1, '2026-05-13', datetime('now'), 0, 0, 't');")
+          ;; Stub mir-read so we don't pop the queue in tests.
+          (cl-letf (((symbol-function 'mir-read) #'ignore))
+            (mir-reschedule "2026-06-01"))
+          (let ((af (nth 2 (car (mir--select-topic-db "T1")))))
+            (should (< (abs (- af (* 2.0 mir-a-factor-bump-postpone))) mir-test--af-tol))))
+      (delete-file tmp))))
+
+(ert-deftest mir-reschedule-advance-bumps-adaptive ()
+  "Rescheduling to an earlier date bumps A-factor down."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp)
+         (mir-a-factor-mode 'adaptive)
+         (mir--current-topic (mir-test--current-topic-with-due "T1" 50.0 "2026-05-13")))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('T1', 50.0, 2.0, 1, '2026-05-13', datetime('now'), 0, 0, 't');")
+          (cl-letf (((symbol-function 'mir-read) #'ignore))
+            (mir-reschedule "2026-04-01"))
+          (let ((af (nth 2 (car (mir--select-topic-db "T1")))))
+            (should (< (abs (- af (* 2.0 mir-a-factor-bump-advance))) mir-test--af-tol))))
+      (delete-file tmp))))
+
+(ert-deftest mir-postpone-bumps-adaptive ()
+  "`mir-postpone' adds N days to due and bumps A-factor."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp)
+         (mir-a-factor-mode 'adaptive)
+         (mir--current-topic (mir-test--current-topic-with-due "T1" 50.0 "2026-05-13")))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('T1', 50.0, 2.0, 1, '2026-05-13', datetime('now'), 0, 0, 't');")
+          (cl-letf (((symbol-function 'mir-read) #'ignore))
+            (mir-postpone 7))
+          (let ((af (nth 2 (car (mir--select-topic-db "T1")))))
+            (should (< (abs (- af (* 2.0 mir-a-factor-bump-postpone))) mir-test--af-tol))))
+      (delete-file tmp))))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here
