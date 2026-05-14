@@ -786,16 +786,19 @@ if there were 5 topics in the database, their priorities would be 0.0,
 25.0, 50.0, 75.0 and 100.0 respectively. This function should be called
 after adding a topic or modifying an existing topic's priority in some
 way."
-  (sqlite-execute (mir--get-db)
-                  (concat
-                   "WITH ordered AS (SELECT id, priority, "
-                   "ROW_NUMBER() OVER (ORDER BY priority, id) "
-                   "AS rn, COUNT(*) OVER () AS total FROM topics "
-                   "WHERE archived = 0) UPDATE topics "
-                   "SET priority = (SELECT (rn - 1) * "
-                   "(100.0/(total-1)) FROM ordered "
-                   "WHERE ordered.id = topics.id) "
-                   "WHERE archived = 0;")))
+  ;; Skip when there are fewer than 2 active topics: the SQL below divides
+  ;; by (total-1), which would null out the only row's priority.
+  (when (> (mir--count-active-topics-db) 1)
+    (sqlite-execute (mir--get-db)
+                    (concat
+                     "WITH ordered AS (SELECT id, priority, "
+                     "ROW_NUMBER() OVER (ORDER BY priority, id) "
+                     "AS rn, COUNT(*) OVER () AS total FROM topics "
+                     "WHERE archived = 0) UPDATE topics "
+                     "SET priority = (SELECT (rn - 1) * "
+                     "(100.0/(total-1)) FROM ordered "
+                     "WHERE ordered.id = topics.id) "
+                     "WHERE archived = 0;"))))
 
 
 (defun mir--select-topic-db (id)
@@ -819,16 +822,17 @@ supposed to."
          (new-priority (+ old-priority (* delta 4))))
     (mir--update-priority-db id new-priority)))
 
-(defun mir--add-topic-to-db (id priority title &optional is-extract)
+(defun mir--add-topic-to-db (id priority title &optional is-extract content-units)
   (mir--init-db)
   (sqlite-execute (mir--get-db)
-                    "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES(?, ?, ?, ?, date(julianday('now', 'localtime') + ?), datetime('now', 'localtime'), 0, 0, ?)"
-                    `(,id
-                      ,priority
-                      ,mir-default-a-factor
-                      ,mir-default-topic-interval
-                      ,mir-default-topic-interval
-                      ,title))
+                  "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title, content_units) VALUES(?, ?, ?, ?, date(julianday('now', 'localtime') + ?), datetime('now', 'localtime'), 0, 0, ?, ?)"
+                  `(,id
+                    ,priority
+                    ,mir-default-a-factor
+                    ,mir-default-topic-interval
+                    ,mir-default-topic-interval
+                    ,title
+                    ,content-units))
   (mir--rescale-priority-values-db))
 
 (defun mir--add-extract-to-db (id priority title)

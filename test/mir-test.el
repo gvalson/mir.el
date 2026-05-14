@@ -121,5 +121,22 @@
                           (mir-test--column-names (mir--get-db) "topics"))))
       (delete-file tmp))))
 
+(ert-deftest mir-add-topic-persists-content-units ()
+  "When provided, `content_units' is stored on the new topic row."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (mir--add-topic-to-db "T1" 50.0 "title" nil 345)
+          (let* ((row (car (mir--select-topic-db "T1")))
+                 (db (mir--get-db))
+                 (units (caar (sqlite-select
+                               db
+                               "SELECT content_units FROM topics WHERE id = ?"
+                               '("T1")))))
+            (should (= units 345))))
+      (delete-file tmp))))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here
