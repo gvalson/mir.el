@@ -884,6 +884,15 @@ in which case returns `1.2 + priority/17.543859'."
                   "UPDATE topics SET a_factor=? WHERE id=?"
                   `(,a-factor ,id)))
 
+(defun mir--bump-a-factor (id factor)
+  "Multiply topic ID's A-factor by FACTOR, clamp, persist.
+If the topic has no A-factor set (somehow nil), seed from
+`mir-default-a-factor' first."
+  (let* ((row (car (mir--select-topic-db id)))
+         (old-af (or (nth 2 row) mir-default-a-factor))
+         (new-af (mir--clamp-a-factor (* old-af factor))))
+    (mir--update-af-db id new-af)))
+
 (defun mir--update-priority-db (id priority)
   (sqlite-execute (mir--get-db)
                   "UPDATE topics SET priority=? WHERE id=?"

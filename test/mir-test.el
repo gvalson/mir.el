@@ -138,5 +138,39 @@
             (should (= units 345))))
       (delete-file tmp))))
 
+(ert-deftest mir-bump-a-factor-clamps ()
+  "Bumps stay within [min, max]."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('T1', 50.0, 4.9, 1, date('now'), datetime('now'), 0, 0, 't');")
+          (mir--bump-a-factor "T1" 1.10)
+          ;; 4.9 * 1.10 = 5.39 > max → clamped to 5.0
+          (let ((af (nth 2 (car (mir--select-topic-db "T1")))))
+            (should (= af mir-a-factor-max)))
+          (sqlite-execute (mir--get-db)
+                          "UPDATE topics SET a_factor = 1.10 WHERE id = 'T1';")
+          (mir--bump-a-factor "T1" 0.90)
+          ;; 1.10 * 0.90 = 0.99 < min → clamped to 1.05
+          (let ((af (nth 2 (car (mir--select-topic-db "T1")))))
+            (should (= af mir-a-factor-min))))
+      (delete-file tmp))))
+
+(ert-deftest mir-bump-a-factor-multiplies ()
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('T1', 50.0, 2.0, 1, date('now'), datetime('now'), 0, 0, 't');")
+          (mir--bump-a-factor "T1" 1.05)
+          (let ((af (nth 2 (car (mir--select-topic-db "T1")))))
+            (should (< (abs (- af 2.10)) mir-test--af-tol))))
+      (delete-file tmp))))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here
