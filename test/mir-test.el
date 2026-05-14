@@ -72,5 +72,54 @@
   (should (= (mir--initial-a-factor 0) mir-default-a-factor))
   (should (= (mir--initial-a-factor nil) mir-default-a-factor)))
 
+(defun mir-test--column-names (db table)
+  "List column names of TABLE in DB."
+  (mapcar (lambda (row) (nth 1 row))
+          (sqlite-select db (format "PRAGMA table_info(%s);" table))))
+
+(ert-deftest mir-init-db-adds-content-units ()
+  "`mir--init-db' creates the `content_units' column for new DBs."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (should (member "content_units"
+                          (mir-test--column-names (mir--get-db) "topics"))))
+      (delete-file tmp))))
+
+(ert-deftest mir-init-db-migrates-existing ()
+  "`mir--init-db' adds `content_units' to a pre-existing schema."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp))
+    (unwind-protect
+        (progn
+          ;; Create the old (pre-migration) schema by hand:
+          (sqlite-execute
+           (mir--get-db)
+           (concat "CREATE TABLE topics ("
+                   "id TEXT PRIMARY KEY, priority REAL NOT NULL, "
+                   "a_factor REAL NOT NULL, interval REAL NOT NULL, "
+                   "added TEXT NOT NULL, last_review TEXT, "
+                   "times_read INTEGER NOT NULL, "
+                   "archived INT NOT NULL, archived_date TEXT, "
+                   "title TEXT, due TEXT NOT NULL) STRICT;"))
+          (mir--init-db)
+          (should (member "content_units"
+                          (mir-test--column-names (mir--get-db) "topics"))))
+      (delete-file tmp))))
+
+(ert-deftest mir-init-db-migration-idempotent ()
+  "Running `mir--init-db' twice does not error."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (mir--init-db)
+          (should (member "content_units"
+                          (mir-test--column-names (mir--get-db) "topics"))))
+      (delete-file tmp))))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here

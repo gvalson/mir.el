@@ -737,32 +737,47 @@ single-file command."
 (defun mir--get-db ()
   (sqlite-open mir-db-location))
 
+(defun mir--column-exists-p (db table column)
+  "Return non-nil if COLUMN exists in TABLE of DB."
+  (seq-some
+   (lambda (row) (string= (nth 1 row) column))
+   (sqlite-select db (format "PRAGMA table_info(%s);" table))))
+
+(defun mir--maybe-add-column (db table column type)
+  "Add COLUMN TYPE to TABLE if it does not already exist.
+Idempotent and safe to call on a fresh schema."
+  (unless (mir--column-exists-p db table column)
+    (sqlite-execute db (format "ALTER TABLE %s ADD COLUMN %s %s;"
+                               table column type))))
+
 (defun mir--init-db ()
- (sqlite-pragma (mir--get-db)
-                   "foreign_keys = ON;")
- (sqlite-execute (mir--get-db)
-                  (concat "CREATE TABLE IF NOT EXISTS topics ("
-                          "id TEXT PRIMARY KEY, priority REAL NOT NULL, "
-                          "a_factor REAL NOT NULL, interval REAL NOT NULL, "
-                          "added TEXT NOT NULL, last_review TEXT, "
-                          "times_read INTEGER NOT NULL, "
-                          "archived INT NOT NULL, archived_date TEXT, "
-                          ;; should this allow null values?
-                          "title TEXT, " "due TEXT NOT NULL "
-                          ") STRICT;"))
- (sqlite-execute (mir--get-db)
-                 "CREATE INDEX IF NOT EXISTS idx_topics_archived ON topics(archived);")
- (sqlite-execute (mir--get-db)
-                 "CREATE INDEX IF NOT EXISTS idx_topics_priority_id ON topics(priority, id);")
- (sqlite-execute (mir--get-db)
-                 "CREATE INDEX IF NOT EXISTS idx_topics_due_id ON topics(due, id);")
- (sqlite-execute (mir--get-db)
-                  (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
-                          "topic_id TEXT NOT NULL, "
-                          "review_datetime TEXT NOT NULL, "
-                          "priority REAL NOT NULL, a_factor REAL NOT NULL, "
-                          "FOREIGN KEY (topic_id) REFERENCES topics(id)"
-                          ") STRICT;")))
+  (let ((db (mir--get-db)))
+    (sqlite-pragma db "foreign_keys = ON;")
+    (sqlite-execute db
+                    (concat "CREATE TABLE IF NOT EXISTS topics ("
+                            "id TEXT PRIMARY KEY, priority REAL NOT NULL, "
+                            "a_factor REAL NOT NULL, interval REAL NOT NULL, "
+                            "added TEXT NOT NULL, last_review TEXT, "
+                            "times_read INTEGER NOT NULL, "
+                            "archived INT NOT NULL, archived_date TEXT, "
+                            "title TEXT, due TEXT NOT NULL"
+                            ") STRICT;"))
+    (sqlite-execute db
+                    "CREATE INDEX IF NOT EXISTS idx_topics_archived ON topics(archived);")
+    (sqlite-execute db
+                    "CREATE INDEX IF NOT EXISTS idx_topics_priority_id ON topics(priority, id);")
+    (sqlite-execute db
+                    "CREATE INDEX IF NOT EXISTS idx_topics_due_id ON topics(due, id);")
+    (sqlite-execute db
+                    (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
+                            "topic_id TEXT NOT NULL, "
+                            "review_datetime TEXT NOT NULL, "
+                            "priority REAL NOT NULL, a_factor REAL NOT NULL, "
+                            "FOREIGN KEY (topic_id) REFERENCES topics(id)"
+                            ") STRICT;"))
+    ;; Forward-compatible migrations. ALTER TABLE in STRICT tables in
+    ;; SQLite 3.37+ supports adding columns with explicit type names.
+    (mir--maybe-add-column db "topics" "content_units" "REAL")))
 
 (defun mir--rescale-priority-values-db ()
   "Rescale priority values so that every topic's priority is between 0.0
