@@ -99,6 +99,54 @@ ensures that the A-factor is between 1.2 and 6.9 for priorities ranging
 from 0 to 100 (lower meaning more important topics)."
   :type 'boolean)
 
+(defcustom mir-a-factor-mode 'priority-scaled
+  "How A-factor is computed for topics.
+- `priority-scaled' (default): legacy behaviour — derive A-factor from
+  priority each review, scaled by `mir-scale-a-factor-by-priority'.
+- `adaptive': initial A-factor from content length (when available);
+  bumped multiplicatively on extract, postpone, and advance events.
+- `static': use `mir-default-a-factor' verbatim; no scaling.
+
+Default value matches pre-existing behaviour so upgrading users see
+no change unless they opt in."
+  :type '(choice (const priority-scaled) (const adaptive) (const static))
+  :group 'mir)
+
+(defcustom mir-a-factor-function #'mir--a-factor-priority-scaled
+  "Function that computes a topic's new A-factor.
+Called as (FN TOPIC-ID OLD-A-FACTOR PRIORITY EVENT) where EVENT is one of
+`init', `review', `extract', `postpone', `advance'."
+  :type 'function
+  :group 'mir)
+
+(defconst mir-a-factor-min 1.05
+  "Hard lower bound on A-factor in adaptive mode.")
+
+(defconst mir-a-factor-max 5.0
+  "Hard upper bound on A-factor in adaptive mode.")
+
+(defconst mir-a-factor-bump-extract 1.05
+  "Multiplicative bump applied to the parent topic on each extract.")
+
+(defconst mir-a-factor-bump-postpone 1.10
+  "Multiplicative bump applied on postpone or reschedule-later.")
+
+(defconst mir-a-factor-bump-advance 0.90
+  "Multiplicative bump applied on advance (reschedule-earlier).")
+
+(defun mir--clamp-a-factor (value)
+  "Clamp VALUE to [`mir-a-factor-min', `mir-a-factor-max']."
+  (max mir-a-factor-min (min mir-a-factor-max value)))
+
+(defun mir--initial-a-factor (units)
+  "Compute the initial A-factor for content of UNITS length.
+UNITS is page count for PDF, chapter count for EPUB, or minutes for video.
+Returns `mir-default-a-factor' when UNITS is nil or non-positive."
+  (if (or (null units) (<= units 0))
+      mir-default-a-factor
+    (mir--clamp-a-factor
+     (- 2.5 (* 0.25 (log (/ units 10.0) 2))))))
+
 (defcustom mir-query-function #'mir-get-topics-up-to-today-by-priority
   "The function that is used to fetch topics for populating `mir-queue'.
 The default option is to fetch all the topics that are due today sorted
@@ -183,11 +231,12 @@ order to manually select the priority, call this command with
             (text (buffer-substring-no-properties (region-beginning) (region-end))))
       ;; if we're somehow in an existing mir topic, do an extract.
       (if mir-topic-minor-mode
-          (progn
+          (let ((parent-id (car mir--current-topic)))
             (mir--add-extract text prefix)
             (mir--extract-lower-parent-priority
-             (car mir--current-topic)
-             (nth 1 mir--current-topic)))
+             parent-id
+             (nth 1 mir--current-topic))
+            (mir--maybe-bump-parent-on-extract parent-id))
         (mir-import
          text
          (mir-ask-for-priority)
@@ -473,11 +522,37 @@ used with `mir-queue-list-mode'."
     (user-error "%s" "No active topic.")))
 
 (defun mir-reschedule (date)
-  "Reschedule the current topic for a later date."
+  "Reschedule the current topic to DATE.
+In adaptive mode, bumps the A-factor up when DATE is later than the
+current due date, and down when DATE is earlier."
   (interactive
    (list (org-read-date nil)))
-  (let ((id (car mir--current-topic)))
+  (let* ((id (car mir--current-topic))
+         (old-due (nth 10 mir--current-topic)))
     (mir--update-due-db id date)
+    (when (eq mir-a-factor-mode 'adaptive)
+      (let ((factor (cond
+                     ((null old-due) mir-a-factor-bump-postpone)
+                     ((string> date old-due) mir-a-factor-bump-postpone)
+                     ((string< date old-due) mir-a-factor-bump-advance)
+                     (t 1.0))))
+        (unless (= factor 1.0)
+          (mir--bump-a-factor id factor))))
+    (mir-read)))
+
+;;;###autoload
+(defun mir-postpone (days)
+  "Postpone the current topic by DAYS days.
+In adaptive mode this also bumps the A-factor up by
+`mir-a-factor-bump-postpone'."
+  (interactive "nDays to postpone: ")
+  (let* ((id (car mir--current-topic))
+         (new-due (format-time-string
+                   "%Y-%m-%d"
+                   (time-add (current-time) (days-to-time days)))))
+    (mir--update-due-db id new-due)
+    (when (eq mir-a-factor-mode 'adaptive)
+      (mir--bump-a-factor id mir-a-factor-bump-postpone))
     (mir-read)))
 
 (defun mir-find-parent ()
@@ -689,32 +764,47 @@ single-file command."
 (defun mir--get-db ()
   (sqlite-open mir-db-location))
 
+(defun mir--column-exists-p (db table column)
+  "Return non-nil if COLUMN exists in TABLE of DB."
+  (seq-some
+   (lambda (row) (string= (nth 1 row) column))
+   (sqlite-select db (format "PRAGMA table_info(%s);" table))))
+
+(defun mir--maybe-add-column (db table column type)
+  "Add COLUMN TYPE to TABLE if it does not already exist.
+Idempotent and safe to call on a fresh schema."
+  (unless (mir--column-exists-p db table column)
+    (sqlite-execute db (format "ALTER TABLE %s ADD COLUMN %s %s;"
+                               table column type))))
+
 (defun mir--init-db ()
- (sqlite-pragma (mir--get-db)
-                   "foreign_keys = ON;")
- (sqlite-execute (mir--get-db)
-                  (concat "CREATE TABLE IF NOT EXISTS topics ("
-                          "id TEXT PRIMARY KEY, priority REAL NOT NULL, "
-                          "a_factor REAL NOT NULL, interval REAL NOT NULL, "
-                          "added TEXT NOT NULL, last_review TEXT, "
-                          "times_read INTEGER NOT NULL, "
-                          "archived INT NOT NULL, archived_date TEXT, "
-                          ;; should this allow null values?
-                          "title TEXT, " "due TEXT NOT NULL "
-                          ") STRICT;"))
- (sqlite-execute (mir--get-db)
-                 "CREATE INDEX IF NOT EXISTS idx_topics_archived ON topics(archived);")
- (sqlite-execute (mir--get-db)
-                 "CREATE INDEX IF NOT EXISTS idx_topics_priority_id ON topics(priority, id);")
- (sqlite-execute (mir--get-db)
-                 "CREATE INDEX IF NOT EXISTS idx_topics_due_id ON topics(due, id);")
- (sqlite-execute (mir--get-db)
-                  (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
-                          "topic_id TEXT NOT NULL, "
-                          "review_datetime TEXT NOT NULL, "
-                          "priority REAL NOT NULL, a_factor REAL NOT NULL, "
-                          "FOREIGN KEY (topic_id) REFERENCES topics(id)"
-                          ") STRICT;")))
+  (let ((db (mir--get-db)))
+    (sqlite-pragma db "foreign_keys = ON;")
+    (sqlite-execute db
+                    (concat "CREATE TABLE IF NOT EXISTS topics ("
+                            "id TEXT PRIMARY KEY, priority REAL NOT NULL, "
+                            "a_factor REAL NOT NULL, interval REAL NOT NULL, "
+                            "added TEXT NOT NULL, last_review TEXT, "
+                            "times_read INTEGER NOT NULL, "
+                            "archived INT NOT NULL, archived_date TEXT, "
+                            "title TEXT, due TEXT NOT NULL"
+                            ") STRICT;"))
+    (sqlite-execute db
+                    "CREATE INDEX IF NOT EXISTS idx_topics_archived ON topics(archived);")
+    (sqlite-execute db
+                    "CREATE INDEX IF NOT EXISTS idx_topics_priority_id ON topics(priority, id);")
+    (sqlite-execute db
+                    "CREATE INDEX IF NOT EXISTS idx_topics_due_id ON topics(due, id);")
+    (sqlite-execute db
+                    (concat "CREATE TABLE IF NOT EXISTS topic_reviews ("
+                            "topic_id TEXT NOT NULL, "
+                            "review_datetime TEXT NOT NULL, "
+                            "priority REAL NOT NULL, a_factor REAL NOT NULL, "
+                            "FOREIGN KEY (topic_id) REFERENCES topics(id)"
+                            ") STRICT;"))
+    ;; Forward-compatible migrations. ALTER TABLE in STRICT tables in
+    ;; SQLite 3.37+ supports adding columns with explicit type names.
+    (mir--maybe-add-column db "topics" "content_units" "REAL")))
 
 (defun mir--rescale-priority-values-db ()
   "Rescale priority values so that every topic's priority is between 0.0
@@ -723,16 +813,19 @@ if there were 5 topics in the database, their priorities would be 0.0,
 25.0, 50.0, 75.0 and 100.0 respectively. This function should be called
 after adding a topic or modifying an existing topic's priority in some
 way."
-  (sqlite-execute (mir--get-db)
-                  (concat
-                   "WITH ordered AS (SELECT id, priority, "
-                   "ROW_NUMBER() OVER (ORDER BY priority, id) "
-                   "AS rn, COUNT(*) OVER () AS total FROM topics "
-                   "WHERE archived = 0) UPDATE topics "
-                   "SET priority = (SELECT (rn - 1) * "
-                   "(100.0/(total-1)) FROM ordered "
-                   "WHERE ordered.id = topics.id) "
-                   "WHERE archived = 0;")))
+  ;; Skip when there are fewer than 2 active topics: the SQL below divides
+  ;; by (total-1), which would null out the only row's priority.
+  (when (> (mir--count-active-topics-db) 1)
+    (sqlite-execute (mir--get-db)
+                    (concat
+                     "WITH ordered AS (SELECT id, priority, "
+                     "ROW_NUMBER() OVER (ORDER BY priority, id) "
+                     "AS rn, COUNT(*) OVER () AS total FROM topics "
+                     "WHERE archived = 0) UPDATE topics "
+                     "SET priority = (SELECT (rn - 1) * "
+                     "(100.0/(total-1)) FROM ordered "
+                     "WHERE ordered.id = topics.id) "
+                     "WHERE archived = 0;"))))
 
 
 (defun mir--select-topic-db (id)
@@ -756,17 +849,23 @@ supposed to."
          (new-priority (+ old-priority (* delta 4))))
     (mir--update-priority-db id new-priority)))
 
-(defun mir--add-topic-to-db (id priority title &optional is-extract)
+(defun mir--add-topic-to-db (id priority title &optional is-extract content-units)
   (mir--init-db)
   (sqlite-execute (mir--get-db)
-                    "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES(?, ?, ?, ?, date(julianday('now', 'localtime') + ?), datetime('now', 'localtime'), 0, 0, ?)"
-                    `(,id
-                      ,priority
-                      ,mir-default-a-factor
-                      ,mir-default-topic-interval
-                      ,mir-default-topic-interval
-                      ,title))
-  (mir--rescale-priority-values-db))
+                  "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title, content_units) VALUES(?, ?, ?, ?, date(julianday('now', 'localtime') + ?), datetime('now', 'localtime'), 0, 0, ?, ?)"
+                  `(,id
+                    ,priority
+                    ,mir-default-a-factor
+                    ,mir-default-topic-interval
+                    ,mir-default-topic-interval
+                    ,title
+                    ,content-units))
+  (mir--rescale-priority-values-db)
+  ;; In adaptive mode, recompute the initial A-factor now that
+  ;; content_units is in the database.
+  (when (eq mir-a-factor-mode 'adaptive)
+    (let ((af (funcall mir-a-factor-function id mir-default-a-factor priority 'init)))
+      (mir--update-af-db id af))))
 
 (defun mir--add-extract-to-db (id priority title)
   (mir--init-db)
@@ -785,14 +884,37 @@ supposed to."
                   "UPDATE topics SET last_review = datetime('now', 'localtime'), archived = 1, archived_date = datetime('now', 'localtime') WHERE id = ?;" `(,id))
   (mir--rescale-priority-values-db))
 
+(defun mir--a-factor-priority-scaled (_topic-id old-af priority _event)
+  "Legacy A-factor calculation. Ignores TOPIC-ID and EVENT.
+Returns OLD-AF unchanged unless `mir-scale-a-factor-by-priority' is non-nil,
+in which case returns `1.2 + priority/17.543859'."
+  (if mir-scale-a-factor-by-priority
+      (+ 1.2 (/ priority 17.543859))
+    old-af))
+
+(defun mir--a-factor-content-units (id)
+  "Return the `content_units' value for topic ID, or nil."
+  (caar (sqlite-select (mir--get-db)
+                       "SELECT content_units FROM topics WHERE id = ?"
+                       `(,id))))
+
+(defun mir--a-factor-adaptive (id old-af _priority event)
+  "Adaptive A-factor function.
+EVENT=`init' returns `mir--initial-a-factor' based on the topic's
+stored `content_units'.
+Other events (review, extract, postpone, advance) leave the A-factor
+unchanged here — bumps are applied at their respective callsites via
+`mir--bump-a-factor'."
+  (pcase event
+    ('init (mir--initial-a-factor (mir--a-factor-content-units id)))
+    (_     old-af)))
+
 (defun mir--do-topic-review-db (topic)
   (let* ((id (car topic))
          (priority (nth 1 topic))
          (old-af (nth 2 topic))
          (old-interval (nth 3 topic))
-         (new-af (if mir-scale-a-factor-by-priority
-                     (+ 1.2 (/ priority 17.543859))
-                   old-af))
+         (new-af (funcall mir-a-factor-function id old-af priority 'review))
          (new-interval (* old-interval old-af))
          (new-rt (1+ (nth 6 topic))))
     ;; one thing to note here: due to using `julianday()', the
@@ -810,6 +932,20 @@ supposed to."
   (sqlite-execute (mir--get-db)
                   "UPDATE topics SET a_factor=? WHERE id=?"
                   `(,a-factor ,id)))
+
+(defun mir--bump-a-factor (id factor)
+  "Multiply topic ID's A-factor by FACTOR, clamp, persist.
+If the topic has no A-factor set (somehow nil), seed from
+`mir-default-a-factor' first."
+  (let* ((row (car (mir--select-topic-db id)))
+         (old-af (or (nth 2 row) mir-default-a-factor))
+         (new-af (mir--clamp-a-factor (* old-af factor))))
+    (mir--update-af-db id new-af)))
+
+(defun mir--maybe-bump-parent-on-extract (parent-id)
+  "If adaptive mode is active, bump PARENT-ID's A-factor by extract factor."
+  (when (eq mir-a-factor-mode 'adaptive)
+    (mir--bump-a-factor parent-id mir-a-factor-bump-extract)))
 
 (defun mir--update-priority-db (id priority)
   (sqlite-execute (mir--get-db)
@@ -918,4 +1054,4 @@ redistributing the determined order."
 
 (provide 'mir)
 
-;;; package-name.el ends here
+;;; mir.el ends here
