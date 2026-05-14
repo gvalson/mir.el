@@ -833,7 +833,12 @@ supposed to."
                     ,mir-default-topic-interval
                     ,title
                     ,content-units))
-  (mir--rescale-priority-values-db))
+  (mir--rescale-priority-values-db)
+  ;; In adaptive mode, recompute the initial A-factor now that
+  ;; content_units is in the database.
+  (when (eq mir-a-factor-mode 'adaptive)
+    (let ((af (funcall mir-a-factor-function id mir-default-a-factor priority 'init)))
+      (mir--update-af-db id af))))
 
 (defun mir--add-extract-to-db (id priority title)
   (mir--init-db)

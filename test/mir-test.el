@@ -202,5 +202,32 @@
                      mir-default-a-factor)))
       (delete-file tmp))))
 
+(ert-deftest mir-add-topic-seeds-adaptive-a-factor ()
+  "Under adaptive mode, freshly imported topic gets initial A-factor."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp)
+         (mir-a-factor-mode 'adaptive)
+         (mir-a-factor-function #'mir--a-factor-adaptive))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (mir--add-topic-to-db "T1" 50.0 "title" nil 345)
+          (let ((af (nth 2 (car (mir--select-topic-db "T1")))))
+            (should (< (abs (- af 1.22)) mir-test--af-tol))))
+      (delete-file tmp))))
+
+(ert-deftest mir-add-topic-leaves-default-in-legacy-mode ()
+  "Under priority-scaled mode, fresh topic keeps `mir-default-a-factor'."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp)
+         (mir-a-factor-mode 'priority-scaled))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (mir--add-topic-to-db "T1" 50.0 "title" nil 345)
+          (let ((af (nth 2 (car (mir--select-topic-db "T1")))))
+            (should (= af mir-default-a-factor))))
+      (delete-file tmp))))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here
