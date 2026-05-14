@@ -860,6 +860,23 @@ in which case returns `1.2 + priority/17.543859'."
       (+ 1.2 (/ priority 17.543859))
     old-af))
 
+(defun mir--a-factor-content-units (id)
+  "Return the `content_units' value for topic ID, or nil."
+  (caar (sqlite-select (mir--get-db)
+                       "SELECT content_units FROM topics WHERE id = ?"
+                       `(,id))))
+
+(defun mir--a-factor-adaptive (id old-af _priority event)
+  "Adaptive A-factor function.
+EVENT=`init' returns `mir--initial-a-factor' based on the topic's
+stored `content_units'.
+Other events (review, extract, postpone, advance) leave the A-factor
+unchanged here — bumps are applied at their respective callsites via
+`mir--bump-a-factor'."
+  (pcase event
+    ('init (mir--initial-a-factor (mir--a-factor-content-units id)))
+    (_     old-af)))
+
 (defun mir--do-topic-review-db (topic)
   (let* ((id (car topic))
          (priority (nth 1 topic))

@@ -172,5 +172,35 @@
             (should (< (abs (- af 2.10)) mir-test--af-tol))))
       (delete-file tmp))))
 
+(ert-deftest mir-a-factor-adaptive-init ()
+  "EVENT=init returns initial A-factor from content_units."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title, content_units) VALUES('T1', 50.0, 2.0, 1, date('now'), datetime('now'), 0, 0, 't', 345);")
+          (let ((af (mir--a-factor-adaptive "T1" 2.0 50 'init)))
+            (should (< (abs (- af 1.22)) mir-test--af-tol))))
+      (delete-file tmp))))
+
+(ert-deftest mir-a-factor-adaptive-review-keeps-old ()
+  "EVENT=review returns OLD-AF unchanged (bumps happen on other events)."
+  (should (= (mir--a-factor-adaptive "T1" 2.0 50 'review) 2.0)))
+
+(ert-deftest mir-a-factor-adaptive-content-units-missing ()
+  "When `content_units' is NULL, init falls back to default."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('T1', 50.0, 2.0, 1, date('now'), datetime('now'), 0, 0, 't');")
+          (should (= (mir--a-factor-adaptive "T1" 2.0 50 'init)
+                     mir-default-a-factor)))
+      (delete-file tmp))))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here
