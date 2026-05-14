@@ -229,5 +229,35 @@
             (should (= af mir-default-a-factor))))
       (delete-file tmp))))
 
+(ert-deftest mir-extract-bumps-parent-in-adaptive-mode ()
+  "When `mir-a-factor-mode' is `adaptive', extracting bumps parent."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp)
+         (mir-a-factor-mode 'adaptive))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('parent', 50.0, 2.0, 1, date('now'), datetime('now'), 0, 0, 't');")
+          (mir--maybe-bump-parent-on-extract "parent")
+          (let ((af (nth 2 (car (mir--select-topic-db "parent")))))
+            (should (< (abs (- af (* 2.0 mir-a-factor-bump-extract))) mir-test--af-tol))))
+      (delete-file tmp))))
+
+(ert-deftest mir-extract-noop-in-legacy-mode ()
+  "Under priority-scaled mode, extract does not touch parent A-factor."
+  (let* ((tmp (make-temp-file "mir-test-db-"))
+         (mir-db-location tmp)
+         (mir-a-factor-mode 'priority-scaled))
+    (unwind-protect
+        (progn
+          (mir--init-db)
+          (sqlite-execute (mir--get-db)
+                          "INSERT INTO topics (id, priority, a_factor, interval, due, added, times_read, archived, title) VALUES('parent', 50.0, 2.0, 1, date('now'), datetime('now'), 0, 0, 't');")
+          (mir--maybe-bump-parent-on-extract "parent")
+          (let ((af (nth 2 (car (mir--select-topic-db "parent")))))
+            (should (= af 2.0))))
+      (delete-file tmp))))
+
 (provide 'mir-test)
 ;;; mir-test.el ends here

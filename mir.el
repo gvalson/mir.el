@@ -231,11 +231,12 @@ order to manually select the priority, call this command with
             (text (buffer-substring-no-properties (region-beginning) (region-end))))
       ;; if we're somehow in an existing mir topic, do an extract.
       (if mir-topic-minor-mode
-          (progn
+          (let ((parent-id (car mir--current-topic)))
             (mir--add-extract text prefix)
             (mir--extract-lower-parent-priority
-             (car mir--current-topic)
-             (nth 1 mir--current-topic)))
+             parent-id
+             (nth 1 mir--current-topic))
+            (mir--maybe-bump-parent-on-extract parent-id))
         (mir-import
          text
          (mir-ask-for-priority)
@@ -914,6 +915,11 @@ If the topic has no A-factor set (somehow nil), seed from
          (old-af (or (nth 2 row) mir-default-a-factor))
          (new-af (mir--clamp-a-factor (* old-af factor))))
     (mir--update-af-db id new-af)))
+
+(defun mir--maybe-bump-parent-on-extract (parent-id)
+  "If adaptive mode is active, bump PARENT-ID's A-factor by extract factor."
+  (when (eq mir-a-factor-mode 'adaptive)
+    (mir--bump-a-factor parent-id mir-a-factor-bump-extract)))
 
 (defun mir--update-priority-db (id priority)
   (sqlite-execute (mir--get-db)
