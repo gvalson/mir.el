@@ -242,6 +242,22 @@ named =mir.db=. The name and location is configurable via
 =mir-db-location=. You can use emacs' built-in =sqlite-mode-open-file=
 command to inspect the database.
 
+** Adaptive A-factor
+
+By default mir derives a topic's A-factor from its priority (set via
+=mir-scale-a-factor-by-priority=). Set =mir-a-factor-mode= to
+~adaptive~ to instead use an adaptive model where:
+
+- The initial A-factor is computed from the topic's content length
+  (via =content_units=) — longer material gets a smaller A-factor.
+- Each extract bumps the parent's A-factor up by 5%.
+- Postponing or rescheduling later bumps it up by 10%.
+- Rescheduling earlier bumps it down by 10%.
+- Values are clamped to =[1.05, 5.0]=.
+
+The mode is opt-in. Set ~(setq mir-a-factor-mode 'adaptive)~ to enable.
+Existing users see no change.
+
 * Philosophy
 
 ** Why does mir force me to wait before reading?
